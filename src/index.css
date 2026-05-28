@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+/* Base styles to prevent overflow */
+html,
+body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Ensure all elements use border-box */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Prevent images from causing overflow */
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Ensure tables don't cause overflow */
+table {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Flexbox helpers for preventing overflow */
+.flex-1-min {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* Ensure text wraps properly */
+.break-words {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(161 161 170);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(113 113 122);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(82 82 91);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgb(113 113 122);
+}
+
+/* Hide scrollbar for horizontal but keep functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus visible styles */
+:focus-visible {
+  outline: 2px solid rgb(249 115 22);
+  outline-offset: 2px;
+}
+
+/* Prevent text selection on interactive elements */
+button,
+a {
+  user-select: none;
+}
+
+/* Ensure dropdowns and modals don't overflow */
+[data-dropdown],
+[role="dialog"] {
+  max-width: calc(100vw - 2rem);
+}
+
+/* Mobile-first responsive typography */
+html {
+  font-size: 16px;
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+/* Slide-in animation for mobile sidebar drawer */
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.25s ease-out forwards;
+}
+
+/* Improve touch targets on mobile */
+@media (max-width: 640px) {
+  button,
+  a,
+  [role="button"] {
+    min-height: 36px;
+  }
+}
+
+/* Prevent body scroll when mobile sidebar is open */
+body.sidebar-open {
+  overflow: hidden;
+}
+
+/* Safe area insets for notched devices */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
