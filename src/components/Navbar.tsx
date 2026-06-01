@@ -19,8 +19,7 @@ import { Button } from './ui/Button';
 import { Avatar } from './ui/Avatar';
 import { Dropdown, DropdownItem, DropdownDivider } from './ui/Dropdown';
 import { SearchModal } from './SearchModal';
-import { NotificationsPanel } from './NotificationsPanel';
-
+import { NotificationsPanel } from './NotificationsPanel';import { Logo } from './Logo';
 export function Navbar() {
   const { user, profile, signOut } = useAuthStore();
   const { darkMode, toggleDarkMode, sidebarOpen, setSidebarOpen, setSearchOpen, searchOpen, notificationsOpen, setNotificationsOpen } = useUIStore();
@@ -52,12 +51,7 @@ export function Navbar() {
               </button>
               
               <Link to="/" className="flex items-center gap-2 flex-shrink-0">
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold text-xs sm:text-sm">S</span>
-                </div>
-                <span className="font-semibold text-base sm:text-lg text-zinc-900 dark:text-white hidden sm:block truncate">
-                  StartupHub
-                </span>
+                <Logo />
               </Link>
             </div>
 
@@ -142,7 +136,7 @@ export function Navbar() {
                       </div>
                       <DropdownItem 
                         icon={<User className="w-4 h-4" />}
-                        onClick={() => navigate(`/@${profile?.username}`)}
+                        onClick={() => navigate(`/profile/${profile?.username}`)}
                       >
                         Profile
                       </DropdownItem>
