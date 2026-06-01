@@ -25,7 +25,7 @@ export interface Product {
   github_url: string | null;
   logo_url: string | null;
   screenshots: string[];
-  banner_url: string | null;
+  banner_image_url: string | null;
   upvote_count: number;
   created_at: string;
   profiles?: Profile;

@@ -241,16 +241,18 @@ export function ProductPage() {
         className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden"
       >
         {/* Banner */}
-        {product.banner_url ? (
-          <div className="h-48 sm:h-64 w-full">
+        {product.banner_image_url ? (
+          <div className="relative h-56 sm:h-72 w-full overflow-hidden rounded-t-3xl">
             <img
-              src={product.banner_url}
+              src={product.banner_image_url}
               alt={product.name}
-              className="w-full h-full object-cover"
+              loading="lazy"
+              className="absolute inset-0 w-full h-full object-cover"
             />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           </div>
         ) : (
-          <div className="h-32 sm:h-48 w-full bg-gradient-to-r from-orange-400 to-orange-600" />
+          <div className="h-56 sm:h-72 w-full bg-gradient-to-r from-slate-950 via-indigo-700 to-violet-500" />
         )}
 
         <div className="p-6 sm:p-8">
@@ -308,6 +310,14 @@ export function ProductPage() {
                   <Button variant="outline" size="sm">
                     <Share2 className="w-4 h-4" />
                   </Button>
+
+                  {user && product && user.id === product.user_id && (
+                    <Link to={`/product/${product.id}/edit`}>
+                      <Button variant="outline" size="sm">
+                        Edit
+                      </Button>
+                    </Link>
+                  )}
 
                   {user && product && user.id === product.user_id && (
                     <>
@@ -388,7 +398,7 @@ export function ProductPage() {
               />
               <div>
                 <Link
-                  to={`/@${product.profiles.username}`}
+                  to={`/profile/${product.profiles.username}`}
                   className="font-medium text-zinc-900 dark:text-white hover:text-orange-500 transition-colors"
                 >
                   {product.profiles.full_name || product.profiles.username}
@@ -495,7 +505,7 @@ export function ProductPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <Link
-                        to={`/@${comment.profiles?.username}`}
+                        to={`/profile/${comment.profiles?.username}`}
                         className="font-medium text-zinc-900 dark:text-white hover:text-orange-500"
                       >
                         {comment.profiles?.full_name || comment.profiles?.username}

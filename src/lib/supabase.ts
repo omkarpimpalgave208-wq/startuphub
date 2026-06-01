@@ -1,9 +1,19 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+console.log('SUPABASE URL:', supabaseUrl);
+console.log('SUPABASE KEY EXISTS:', !!supabaseAnonKey);
+
+export const supabase: SupabaseClient<any> = createClient(
+  supabaseUrl,
+  supabaseAnonKey
+);
+
+export default supabase;
 
 // INDIVIDUAL TYPES FOR EXPORT COMPATIBILITY AND AUTOCOMPLETION
 export interface ProfileRow {
@@ -32,7 +42,7 @@ export interface ProductRow {
   github_url: string | null;
   logo_url: string | null;
   screenshots: string[];
-  banner_url: string | null;
+  banner_image_url: string | null;
   upvote_count: number;
   created_at: string;
 }
@@ -99,25 +109,7 @@ export interface NotificationRow {
   created_at: string;
 }
 
-function createNoopSupabaseClient(): SupabaseClient<any> {
-  return {
-    auth: {
-      signOut: async () => ({ data: null, error: { message: 'Supabase is not configured' } }),
-      getSession: async () => ({ data: { session: null }, error: null }),
-      onAuthStateChange: () => ({ data: { subscription: null }, error: null }),
-      signInWithPassword: async () => ({ data: { user: null }, error: { message: 'Supabase is not configured' } }),
-      signUp: async () => ({ data: { user: null }, error: { message: 'Supabase is not configured' } }),
-      setSession: async () => ({ error: { message: 'Supabase is not configured' } }),
-      signInWithIdToken: async () => ({ error: { message: 'Supabase is not configured' } })
-    }
-  } as unknown as SupabaseClient<any>;
-}
-
 // TYPING THE CLIENT WITH ANY TO BYPASS OVERLY STRICT LIBRARY RECURSION TYPING ISSUES
-export const supabase: SupabaseClient<any> = isSupabaseConfigured
-  ? createClient<any>(supabaseUrl, supabaseKey)
-  : createNoopSupabaseClient();
-
 export type Database = {
   public: {
     Tables: {

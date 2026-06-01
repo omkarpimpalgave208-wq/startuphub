@@ -2,7 +2,8 @@ import { supabase, isSupabaseConfigured } from './supabase';
 
 /**
  * Initiates Google OAuth sign-in redirect flow using Supabase Auth.
- * Uses the current browser origin so localhost and deployed environments stay on the active platform.
+ * Initiates Google OAuth redirect using the configured app URL in production,
+ * or the current browser origin in development.
  */
 export async function signInWithGoogle(_appName?: string) {
   if (!isSupabaseConfigured) {
@@ -11,12 +12,14 @@ export async function signInWithGoogle(_appName?: string) {
   }
 
   try {
-    const redirectUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const redirectTo =
+      import.meta.env.VITE_APP_URL ||
+      (typeof window !== 'undefined' ? window.location.origin : '');
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: redirectUrl
+        redirectTo
       }
     });
 

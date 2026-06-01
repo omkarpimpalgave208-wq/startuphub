@@ -222,7 +222,7 @@ export function DiscussionPage() {
                     />
                     <div>
                       <Link
-                        to={`/@${discussion.profiles.username}`}
+                        to={`/profile/${discussion.profiles.username}`}
                         className="font-medium text-zinc-900 dark:text-white hover:text-orange-500"
                       >
                         {discussion.profiles.full_name || discussion.profiles.username}
@@ -298,7 +298,7 @@ export function DiscussionPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <Link
-                    to={`/@${comment.profiles?.username}`}
+                    to={`/profile/${comment.profiles?.username}`}
                     className="font-medium text-zinc-900 dark:text-white hover:text-orange-500"
                   >
                     {comment.profiles?.full_name || comment.profiles?.username}

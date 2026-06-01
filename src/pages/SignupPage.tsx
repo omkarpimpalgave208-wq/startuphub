@@ -6,6 +6,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { signInWithGoogle } from '../lib/googleAuth';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Logo } from '../components/Logo';
 
 export function SignupPage() {
   const navigate = useNavigate();
@@ -65,6 +66,9 @@ export function SignupPage() {
         </Link>
 
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-8">
+          <div className="flex justify-center mb-6">
+            <Logo showTextOnMobile />
+          </div>
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">
               Create your account

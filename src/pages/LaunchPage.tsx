@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { optimizeImageFile, needsCompression, getCompressionMessage, cropAndCompressBannerImage, formatFileSize } from '../lib/imageCompression';
 
 const categories = [
   'SaaS',
@@ -38,6 +39,13 @@ export function LaunchPage() {
   });
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
+  const [banner, setBanner] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string>('');
+  const [bannerRemoved, setBannerRemoved] = useState(false);
+  const [bannerZoom, setBannerZoom] = useState(1);
+  const [bannerFocus, setBannerFocus] = useState({ x: 50, y: 50 });
+  const [draggingBanner, setDraggingBanner] = useState(false);
+  const [bannerMessage, setBannerMessage] = useState<string>('');
   
   // Real files references for direct Supabase uploads
   const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
@@ -71,6 +79,96 @@ export function LaunchPage() {
       setLogoPreview(URL.createObjectURL(file));
       setErrors(prev => ({ ...prev, logo: '' }));
     }
+  };
+
+  const resetBannerAdjustments = () => {
+    setBannerZoom(1);
+    setBannerFocus({ x: 50, y: 50 });
+  };
+
+  const handleBannerFile = (file: File) => {
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setErrors(prev => ({ ...prev, banner: 'Upload a JPG, PNG, or WebP banner image.' }));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, banner: 'Banner image exceeds 10MB size limit.' }));
+      return;
+    }
+
+    setBanner(file);
+    setBannerPreview(URL.createObjectURL(file));
+    setBannerRemoved(false);
+    resetBannerAdjustments();
+    setErrors(prev => ({ ...prev, banner: '' }));
+    setBannerMessage('Banner ready. Adjust focus and zoom before publishing.');
+  };
+
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleBannerFile(file);
+  };
+
+  const handleBannerDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDraggingBanner(true);
+  };
+
+  const handleBannerDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDraggingBanner(false);
+  };
+
+  const handleBannerDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDraggingBanner(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleBannerFile(file);
+  };
+
+  const removeBanner = () => {
+    setBanner(null);
+    setBannerPreview('');
+    setBannerRemoved(true);
+    setErrors(prev => ({ ...prev, banner: '' }));
+    resetBannerAdjustments();
+    setBannerMessage('Banner removed. Upload a new image if needed.');
+  };
+
+  const prepareBannerUpload = async (file: File) => {
+    let fileToUpload = file;
+
+    if (needsCompression(fileToUpload, 4)) {
+      setUploadStage('Compressing banner image...');
+      setBannerMessage(getCompressionMessage(fileToUpload.size, 4));
+      const compressed = await optimizeImageFile(fileToUpload, {
+        maxWidth: 1600,
+        maxHeight: 900,
+        maxSizeMB: 1.5,
+        quality: 0.85
+      });
+      fileToUpload = compressed.file;
+      setBannerMessage(`Compressed banner to ${formatFileSize(fileToUpload.size)}.`);
+    }
+
+    if (fileToUpload && (bannerZoom !== 1 || bannerFocus.x !== 50 || bannerFocus.y !== 50)) {
+      setUploadStage('Adjusting banner crop...');
+      const cropped = await cropAndCompressBannerImage(fileToUpload, {
+        x: bannerFocus.x,
+        y: bannerFocus.y,
+        zoom: bannerZoom
+      }, 16 / 6, 1600, 600, {
+        maxWidth: 1600,
+        maxHeight: 900,
+        maxSizeMB: 1.5,
+        quality: 0.85
+      });
+      fileToUpload = cropped.file;
+      setBannerMessage(`Banner adjusted and compressed to ${formatFileSize(fileToUpload.size)}.`);
+    }
+
+    return api.uploadFile(fileToUpload, 'banners');
   };
 
   const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,6 +244,21 @@ export function LaunchPage() {
       }
     }
 
+    let bannerUrl = '';
+    if (banner) {
+      setUploadStage('Uploading banner image...');
+      try {
+        bannerUrl = await prepareBannerUpload(banner);
+      } catch (err: any) {
+        console.error('Banner upload failed:', err);
+        setErrors(prev => ({
+          ...prev,
+          banner: 'Banner upload failed. Product will be created without it.'
+        }));
+        bannerUrl = '';
+      }
+    }
+
     const screenshotUrls: string[] = [];
     if (screenshotFiles.length > 0) {
       setUploadStage('Uploading screenshots...');
@@ -174,6 +287,7 @@ export function LaunchPage() {
         website_url: formData.website_url,
         github_url: formData.github_url,
         logo_url: logoUrl || undefined,
+        banner_image_url: bannerUrl || undefined,
         screenshots: screenshotUrls.length > 0 ? screenshotUrls : []
       });
 
@@ -206,20 +320,132 @@ export function LaunchPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Banner Upload */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+              Upload Banner Image
+            </label>
+            <div className="flex flex-col gap-4">
+              <div
+                onDragOver={handleBannerDragOver}
+                onDragLeave={handleBannerDragLeave}
+                onDrop={handleBannerDrop}
+                className={
+                  `rounded-3xl border-2 border-dashed overflow-hidden bg-zinc-100 dark:bg-zinc-800 transition-colors
+                  ${draggingBanner ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/20' : 'border-zinc-300 dark:border-zinc-700'}
+                  ${errors.banner ? 'border-red-300' : ''}`
+                }
+                style={{ minHeight: 180 }}
+              >
+                {bannerPreview ? (
+                  <div className="relative h-full w-full overflow-hidden bg-black/5">
+                    <img
+                      src={bannerPreview}
+                      alt="Banner preview"
+                      className="absolute inset-0 w-full h-full object-cover"
+                      style={{
+                        objectPosition: `${bannerFocus.x}% ${bannerFocus.y}%`,
+                        transform: `scale(${bannerZoom})`
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+                    <button
+                      type="button"
+                      onClick={removeBanner}
+                      className="absolute right-3 top-3 rounded-full bg-black/60 text-white p-2 hover:bg-black/80 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-2 py-8 px-4 text-center text-zinc-500">
+                    <ImageIcon className="w-8 h-8" />
+                    <p className="text-sm font-medium">Drag & drop or click to upload</p>
+                    <p className="text-xs">JPG, PNG, or WEBP up to 10MB</p>
+                  </div>
+                )}
+              </div>
+
+              {bannerPreview && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Zoom</label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={2}
+                      step={0.05}
+                      value={bannerZoom}
+                      onChange={(e) => setBannerZoom(Number(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-zinc-500">Adjust banner zoom</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Horizontal focus</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={bannerFocus.x}
+                      onChange={(e) => setBannerFocus(prev => ({ ...prev, x: Number(e.target.value) }))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Vertical focus</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={bannerFocus.y}
+                      onChange={(e) => setBannerFocus(prev => ({ ...prev, y: Number(e.target.value) }))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="inline-flex items-center px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+                  <Upload className="w-4 h-4 mr-2" />
+                  {bannerPreview ? 'Replace banner' : 'Upload banner'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleBannerChange}
+                    className="hidden"
+                  />
+                </label>
+                {bannerPreview && (
+                  <button
+                    type="button"
+                    onClick={removeBanner}
+                    className="text-sm font-semibold text-red-600 hover:text-red-700"
+                  >
+                    Remove banner
+                  </button>
+                )}
+              </div>
+            </div>
+            {(errors.banner || bannerMessage) && (
+              <p className={
+                `mt-2 text-sm ${errors.banner ? 'text-red-600' : 'text-zinc-500 dark:text-zinc-400'}`
+              }>{errors.banner || bannerMessage}</p>
+            )}
+          </div>
+
           {/* Logo Upload */}
           <div>
             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
               Product Logo *
             </label>
             <div className="flex items-center gap-4">
-              <div className={`
-                w-24 h-24 rounded-xl border-2 border-dashed flex items-center justify-center
-                ${logoPreview 
-                  ? 'border-zinc-300 dark:border-zinc-700' 
-                  : 'border-zinc-300 dark:border-zinc-700 hover:border-orange-500'
-                }
-                ${errors.logo ? 'border-red-300' : ''}
-              `}>
+              <div className={
+                `w-24 h-24 rounded-xl border-2 border-dashed flex items-center justify-center
+                ${logoPreview ? 'border-zinc-300 dark:border-zinc-700' : 'border-zinc-300 dark:border-zinc-700 hover:border-orange-500'}
+                ${errors.logo ? 'border-red-300' : ''}`
+              }>
                 {logoPreview ? (
                   <img
                     src={logoPreview}

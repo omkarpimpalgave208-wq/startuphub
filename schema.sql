@@ -29,10 +29,12 @@ create table if not exists public.products (
   github_url text,
   logo_url text,
   screenshots text[] default '{}'::text[] not null,
-  banner_url text,
+  banner_image_url text,
   upvote_count integer default 0 not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+alter table if exists public.products rename column if exists banner_url to banner_image_url;
 
 -- 3. UPVOTES (VOTES) TABLE
 create table if not exists public.upvotes (

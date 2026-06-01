@@ -50,7 +50,7 @@ export function MakersPage() {
               animate={{ opacity: 1, y: 0 }}
               whileHover={{ y: -2 }}
             >
-              <Link to={`/@${maker.username}`} className="block w-full">
+              <Link to={`/profile/${maker.username}`} className="block w-full">
                 <div className="w-full bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 hover:border-orange-500/30 dark:hover:border-orange-500/30 transition-all duration-200">
                   <div className="flex items-start gap-3 sm:gap-4">
                     <Avatar

@@ -16,6 +16,7 @@ import { NewDiscussionPage } from './pages/NewDiscussionPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { EditProductPage } from './pages/EditProductPage';
 import { BookmarksPage } from './pages/BookmarksPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -43,6 +44,7 @@ function App() {
             
             {/* Product Routes */}
             <Route path="product/:id" element={<ProductPage />} />
+            <Route path="product/:id/edit" element={<EditProductPage />} />
             <Route path="launch" element={<LaunchPage />} />
             
             {/* Discussion Routes */}
@@ -50,7 +52,7 @@ function App() {
             <Route path="discussions/new" element={<NewDiscussionPage />} />
             
             {/* User Routes */}
-            <Route path="@:username" element={<ProfilePage />} />
+            <Route path="profile/:username" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="bookmarks" element={<BookmarksPage />} />
             

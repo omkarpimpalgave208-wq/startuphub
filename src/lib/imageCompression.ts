@@ -169,6 +169,104 @@ export async function optimizeImageFile(
   });
 }
 
+interface FocusSettings {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+export async function cropAndCompressBannerImage(
+  file: File,
+  focus: FocusSettings,
+  aspectRatio: number,
+  outputWidth = 1920,
+  outputHeight = 720,
+  options: CompressionOptions = {}
+): Promise<{ file: File; originalSize: number; compressedSize: number }> {
+  const opts = { ...DEFAULT_COMPRESSION_OPTIONS, ...options };
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const img = new Image();
+        img.onload = async () => {
+          try {
+            const originalWidth = img.width;
+            const originalHeight = img.height;
+            const srcAspect = originalWidth / originalHeight;
+
+            let cropWidth = originalWidth;
+            let cropHeight = originalHeight;
+
+            if (srcAspect > aspectRatio) {
+              cropHeight = originalHeight;
+              cropWidth = Math.round(cropHeight * aspectRatio);
+            } else {
+              cropWidth = originalWidth;
+              cropHeight = Math.round(cropWidth / aspectRatio);
+            }
+
+            cropWidth = Math.max(1, Math.min(originalWidth, Math.round(cropWidth / focus.zoom)));
+            cropHeight = Math.max(1, Math.min(originalHeight, Math.round(cropHeight / focus.zoom)));
+
+            const centerX = Math.round((focus.x / 100) * originalWidth);
+            const centerY = Math.round((focus.y / 100) * originalHeight);
+            const srcX = clamp(centerX - Math.floor(cropWidth / 2), 0, originalWidth - cropWidth);
+            const srcY = clamp(centerY - Math.floor(cropHeight / 2), 0, originalHeight - cropHeight);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = outputWidth;
+            canvas.height = outputHeight;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Failed to get canvas context');
+
+            ctx.drawImage(
+              img,
+              srcX,
+              srcY,
+              cropWidth,
+              cropHeight,
+              0,
+              0,
+              outputWidth,
+              outputHeight
+            );
+
+            const compressedBlob = await compressImage(canvas, file, opts);
+            const compressedFile = new File(
+              [compressedBlob],
+              file.name,
+              { type: file.type || 'image/jpeg' }
+            );
+
+            resolve({
+              file: compressedFile,
+              originalSize: file.size,
+              compressedSize: compressedFile.size
+            });
+          } catch (err) {
+            reject(err);
+          }
+        };
+
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 /**
  * Check if file needs compression
  */

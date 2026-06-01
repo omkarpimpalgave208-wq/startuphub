@@ -1,9 +1,9 @@
 {
-  "env": {
-    "SUPABASE_URL": "https://aovststjbwffyrfzryic.supabase.co",
-    "SUPABASE_SERVICE_ROLE_KEY": "sb_secret_Bx-Y76d4Z_gaTQKU00T_yg_GBa2j2h8",
-    "VITE_SUPABASE_URL": "https://aovststjbwffyrfzryic.supabase.co",
-    "VITE_SUPABASE_ANON_KEY": "sb_publishable_pYi8ebv09smIFlTH5U_IXg_Xo_6fw1U",
-    "VITE_GOOGLE_CLIENT_ID": "1065078894672-rmp5kp8vfjns5rn9kp5psfp16g691043.apps.googleusercontent.com"
-  }
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
+  ]
 }

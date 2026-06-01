@@ -126,7 +126,7 @@ export function SearchModal({ onClose }: SearchModalProps) {
               {results.profiles.map((profile) => (
                 <Link
                   key={profile.id}
-                  to={`/@${profile.username}`}
+                  to={`/profile/${profile.username}`}
                   onClick={onClose}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
                 >

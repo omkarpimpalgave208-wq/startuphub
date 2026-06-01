@@ -76,7 +76,7 @@ export const api = {
     github_url?: string;
     logo_url?: string;
     screenshots?: string[];
-    banner_url?: string;
+    banner_image_url?: string;
   }): Promise<Product> {
     if (!productData.user_id) {
       throw new Error('Please login first');
@@ -96,7 +96,7 @@ export const api = {
       github_url: productData.github_url?.trim() || null,
       logo_url: productData.logo_url ? productData.logo_url.trim() : null,
       screenshots: Array.isArray(productData.screenshots) ? productData.screenshots.filter(Boolean) : [],
-      banner_url: productData.banner_url ? productData.banner_url.trim() : null,
+      banner_image_url: productData.banner_image_url ? productData.banner_image_url.trim() : null,
       upvote_count: 0
     };
 
@@ -625,25 +625,6 @@ export const api = {
     })) as unknown as Profile[];
   },
 
-  async ensureStorageBucket(): Promise<void> {
-    try {
-      const response = await fetch('/api/storage-setup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ bucket: STORAGE_BUCKET })
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Unable to verify storage bucket configuration.');
-      }
-    } catch (err: any) {
-      throw new Error(err?.message || 'Unable to configure storage bucket.');
-    }
-  },
-
   async uploadFile(file: File, folder: string): Promise<string> {
     const allowedImageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
     const maxBytes = folder === 'avatars' ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
@@ -659,32 +640,16 @@ export const api = {
     const fileExt = file.name.split('.').pop() || 'png';
     const filePath = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
 
-    const attemptUpload = async () => {
-      const { error: uploadError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (uploadError) {
-        if (uploadError.status === 404) {
-          return uploadError;
-        }
-        throw new Error(uploadError.message || 'Upload failed. Please try again.');
-      }
-      return null;
-    };
-
-    let uploadError = await attemptUpload();
-    if (uploadError) {
-      await this.ensureStorageBucket();
-      uploadError = await attemptUpload();
-    }
+    const { error: uploadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true
+      });
 
     if (uploadError) {
       if (uploadError.status === 404) {
-        throw new Error(`Storage bucket "${STORAGE_BUCKET}" was not found and could not be created automatically. Please verify the Supabase bucket or set VITE_SUPABASE_STORAGE_BUCKET.`);
+        throw new Error(`Storage bucket "${STORAGE_BUCKET}" was not found. Create this bucket in Supabase or set VITE_SUPABASE_STORAGE_BUCKET to an existing public bucket.`);
       }
       throw new Error(uploadError.message || 'Upload failed. Please try again.');
     }

@@ -95,7 +95,7 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
       return `/discussion/${notification.discussion_id}`;
     }
     if (notification.actor) {
-      return `/@${notification.actor.username}`;
+      return `/profile/${notification.actor.username}`;
     }
     return '#';
   };
