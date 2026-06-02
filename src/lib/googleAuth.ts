@@ -32,5 +32,20 @@ export async function signInWithGoogle(_appName?: string) {
 }
 
 export async function handleGoogleRedirect() {
-  return;
+  if (!isSupabaseConfigured) return;
+
+  try {
+    const { data, error } = await supabase.auth.getSessionFromUrl();
+
+    if (error) {
+      console.warn('[google-auth] Failed to restore OAuth session from URL:', error.message);
+      return;
+    }
+
+    if (data?.session) {
+      console.log('[google-auth] OAuth session restored from redirect URL');
+    }
+  } catch (err) {
+    console.error('[google-auth] Error processing OAuth redirect:', err);
+  }
 }

@@ -16,8 +16,10 @@ import { NewDiscussionPage } from './pages/NewDiscussionPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ConnectionsPage } from './pages/ConnectionsPage';
 import { EditProductPage } from './pages/EditProductPage';
 import { BookmarksPage } from './pages/BookmarksPage';
+import { MessagesPage } from './pages/MessagesPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 function App() {
@@ -53,6 +55,9 @@ function App() {
             
             {/* User Routes */}
             <Route path="profile/:username" element={<ProfilePage />} />
+            <Route path="connections" element={<ConnectionsPage />} />
+            <Route path="messages" element={<MessagesPage />} />
+            <Route path="messages/:conversationId" element={<MessagesPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="bookmarks" element={<BookmarksPage />} />
             

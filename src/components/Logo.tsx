@@ -7,7 +7,7 @@ export function Logo({ className, showTextOnMobile = false }: { className?: stri
   return (
     <div className={`flex items-center gap-2 ${className ?? ''}`}>
       <img
-        src={`${logo}?v=1.0`}
+        src={logo}
         alt="StartupHub"
         className="w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 object-contain"
       />

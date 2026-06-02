@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Github,
   Twitter,
@@ -8,12 +8,14 @@ import {
   Loader2,
   ArrowLeft,
   Briefcase,
-  Bookmark,
   Sparkles,
-  Layers
+  Layers,
+  UserPlus,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { Profile, Product, Bookmark as SavedBookmark } from '../types';
+import type { Profile, Product, Bookmark as SavedBookmark, ConnectionRequest } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
@@ -24,7 +26,7 @@ const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
 
 const tabItems = [
-  { id: 'products', label: 'Products' },
+  { id: 'products', label: 'My Startups' },
   { id: 'discussions', label: 'Discussions' },
   { id: 'activity', label: 'Activity' },
   { id: 'saved', label: 'Saved' },
@@ -42,12 +44,20 @@ type TabId = (typeof tabItems)[number]['id'];
 export function ProfilePage() {
   const { username } = useParams<{ username: string }>();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [bookmarks, setBookmarks] = useState<SavedBookmark[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<ConnectionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [savedLoading, setSavedLoading] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [connectionState, setConnectionState] = useState<'none' | 'request_sent' | 'request_received' | 'connected'>('none');
+  const [connectionRequestId, setConnectionRequestId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState('');
   const [coverStyle, setCoverStyle] = useState('gradient-1');
   const [activeTab, setActiveTab] = useState<TabId>('products');
@@ -73,24 +83,87 @@ export function ProfilePage() {
     fetchBookmarks();
   }, [profile, user]);
 
+  useEffect(() => {
+    if (!profile || !user) return;
+
+    const subscriptions = [
+      api.subscribeToChanges(
+        `profile-connections-user-one-${profile.id}`,
+        'connections',
+        '*',
+        () => fetchProfile(),
+        `user_one_id=eq.${profile.id}`
+      ),
+      api.subscribeToChanges(
+        `profile-connections-user-two-${profile.id}`,
+        'connections',
+        '*',
+        () => fetchProfile(),
+        `user_two_id=eq.${profile.id}`
+      ),
+      api.subscribeToChanges(
+        `profile-requests-sender-${profile.id}`,
+        'connection_requests',
+        '*',
+        () => fetchProfile(),
+        `sender_id=eq.${profile.id}`
+      ),
+      api.subscribeToChanges(
+        `profile-requests-receiver-${profile.id}`,
+        'connection_requests',
+        '*',
+        () => fetchProfile(),
+        `receiver_id=eq.${profile.id}`
+      )
+    ];
+
+    return () => {
+      subscriptions.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [profile, user]);
+
+  const fetchIncomingRequests = async (userId: string) => {
+    try {
+      const requests = await api.getIncomingConnectionRequests(userId);
+      setIncomingRequests(requests);
+    } catch (err) {
+      console.error('Error fetching incoming connection requests:', err);
+    }
+  };
+
   const fetchProfile = async () => {
     if (!username) return;
 
     setLoading(true);
+    setActionMessage(null);
+
     try {
       const profileData = await api.getProfileByUsername(username);
-      if (profileData) {
-        setProfile(profileData);
-
-        const productsData = await api.getProducts({ userId: profileData.id });
-        setProducts(productsData);
-
-        if (user) {
-          const followState = await api.checkFollow(user.id, profileData.id);
-          setIsFollowing(followState);
-        }
-      } else {
+      if (!profileData) {
         setProfile(null);
+        return;
+      }
+
+      const productPromise = api.getProducts({ userId: profileData.id });
+      const connectionPromise = api.getConnectionCount(profileData.id);
+      const followPromise = user ? api.checkFollow(user.id, profileData.id) : Promise.resolve(false);
+      const statusPromise = user ? api.getConnectionStatus(user.id, profileData.id) : Promise.resolve({ state: 'none' as const });
+
+      const [productsData, connectionsCount, followState, connectionStatus] = await Promise.all([
+        productPromise,
+        connectionPromise,
+        followPromise,
+        statusPromise
+      ]);
+
+      setProfile({ ...profileData, connections: connectionsCount });
+      setProducts(productsData);
+      setIsFollowing(followState);
+      setConnectionState(connectionStatus.state);
+      setConnectionRequestId(connectionStatus.requestId ?? null);
+
+      if (user?.id === profileData.id) {
+        await fetchIncomingRequests(user.id);
       }
     } catch (err) {
       console.error('Error fetching profile data:', err);
@@ -114,14 +187,27 @@ export function ProfilePage() {
   };
 
   const handleFollow = async () => {
-    if (!user || !profile) return;
+    if (!user || !profile) {
+      setActionMessage('Sign in to follow founders.');
+      return;
+    }
+    if (user.id === profile.id) {
+      setActionMessage('You cannot follow yourself.');
+      return;
+    }
 
+    setFollowLoading(true);
+    setActionMessage(null);
     const previousFollowingState = isFollowing;
     setIsFollowing(!previousFollowingState);
-    setProfile(prev => prev ? {
-      ...prev,
-      followers: (prev.followers || 0) + (previousFollowingState ? -1 : 1)
-    } : null);
+    setProfile(prev =>
+      prev
+        ? {
+            ...prev,
+            followers: (prev.followers || 0) + (previousFollowingState ? -1 : 1)
+          }
+        : null
+    );
 
     try {
       if (previousFollowingState) {
@@ -131,11 +217,113 @@ export function ProfilePage() {
       }
     } catch (err) {
       console.error('Follow error:', err);
+      setActionMessage('Unable to update follow status. Please try again.');
       setIsFollowing(previousFollowingState);
-      setProfile(prev => prev ? {
-        ...prev,
-        followers: (prev.followers || 0) + (previousFollowingState ? 1 : -1)
-      } : null);
+      setProfile(prev =>
+        prev
+          ? {
+              ...prev,
+              followers: (prev.followers || 0) + (previousFollowingState ? 1 : -1)
+            }
+          : null
+      );
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const handleConnect = async () => {
+    if (!user || !profile) {
+      setActionMessage('Sign in to send connection requests.');
+      return;
+    }
+    if (user.id === profile.id) {
+      setActionMessage('You cannot connect with yourself.');
+      return;
+    }
+    if (connectionState !== 'none') return;
+
+    setConnectLoading(true);
+    setActionMessage(null);
+
+    try {
+      await api.sendConnectionRequest(user.id, profile.id);
+      setConnectionState('request_sent');
+      setConnectionRequestId(null);
+      setActionMessage('Connection request sent.');
+    } catch (err) {
+      console.error('Connection request error:', err);
+      setActionMessage((err as Error).message || 'Unable to send connection request.');
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
+  const handleOpenConversation = async () => {
+    if (!user || !profile) {
+      setActionMessage('Sign in to message this member.');
+      return;
+    }
+
+    setMessageLoading(true);
+    setActionMessage(null);
+
+    try {
+      const conversation = await api.openConversation(user.id, profile.id);
+      navigate(`/messages/${conversation.id}`);
+    } catch (err) {
+      console.error('Open conversation error:', err);
+      setActionMessage((err as Error).message || 'Unable to open a conversation.');
+    } finally {
+      setMessageLoading(false);
+    }
+  };
+
+  const handleAcceptConnectionRequest = async () => {
+    if (!user || !connectionRequestId) return;
+
+    setConnectLoading(true);
+    setActionMessage(null);
+
+    try {
+      await api.acceptConnectionRequest(connectionRequestId, user.id);
+      setConnectionState('connected');
+      setProfile(prev =>
+        prev
+          ? {
+              ...prev,
+              connections: (prev.connections || 0) + 1
+            }
+          : prev
+      );
+      setIncomingRequests(prev => prev.filter((item) => item.id !== connectionRequestId));
+      setConnectionRequestId(null);
+      setActionMessage('Connection accepted. You are now connected.');
+    } catch (err) {
+      console.error('Accept connection error:', err);
+      setActionMessage((err as Error).message || 'Unable to accept connection request.');
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
+  const handleRejectConnectionRequest = async () => {
+    if (!user || !connectionRequestId) return;
+
+    setConnectLoading(true);
+    setActionMessage(null);
+
+    try {
+      await api.rejectConnectionRequest(connectionRequestId, user.id);
+      setConnectionState('none');
+      setIncomingRequests(prev => prev.filter((item) => item.id !== connectionRequestId));
+      setConnectionRequestId(null);
+      setActionMessage('Connection request rejected.');
+    } catch (err) {
+      console.error('Reject connection error:', err);
+      setActionMessage((err as Error).message || 'Unable to reject connection request.');
+    } finally {
+      setConnectLoading(false);
     }
   };
 
@@ -163,7 +351,8 @@ export function ProfilePage() {
   const summaryItems = [
     { label: 'Products', value: profile.products || 0 },
     { label: 'Followers', value: profile.followers || 0 },
-    { label: 'Following', value: profile.following || 0 }
+    { label: 'Following', value: profile.following || 0 },
+    { label: 'Connections', value: profile.connections || 0 }
   ];
 
   const profileLinks = [
@@ -179,16 +368,13 @@ export function ProfilePage() {
         return (
           <div className="space-y-4">
             {products.length > 0 ? (
-              products.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))
+              products.map((product) => <ProductCard key={product.id} product={product} />)
             ) : (
               <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-10 text-center">
                 <p className="text-zinc-500">
                   {isOwnProfile
                     ? "You haven't launched any products yet. Create one from the launch page to showcase it here."
-                    : "This founder has not launched products yet."
-                  }
+                    : 'This founder has not launched products yet.'}
                 </p>
               </div>
             )}
@@ -210,11 +396,9 @@ export function ProfilePage() {
                 <Loader2 className="w-6 h-6 mx-auto text-zinc-400 animate-spin" />
               </div>
             ) : bookmarks.length > 0 ? (
-              bookmarks.map((bookmark) => (
-                bookmark.products ? (
-                  <ProductCard key={bookmark.id} product={bookmark.products} />
-                ) : null
-              ))
+              bookmarks.map((bookmark) =>
+                bookmark.products ? <ProductCard key={bookmark.id} product={bookmark.products} /> : null
+              )
             ) : (
               <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-10 text-center">
                 <p className="text-zinc-500">No saved startups yet. Save products from the feed to build your collection.</p>
@@ -396,22 +580,75 @@ export function ProfilePage() {
 
                   <div className="flex flex-wrap items-center gap-3">
                     {!isOwnProfile && user ? (
-                      <Button variant={isFollowing ? 'outline' : 'primary'} onClick={handleFollow}>
-                        {isFollowing ? 'Following' : 'Follow'}
-                      </Button>
+                      <>
+                        <Button
+                          variant={isFollowing ? 'outline' : 'primary'}
+                          size="sm"
+                          loading={followLoading}
+                          onClick={handleFollow}
+                        >
+                          {isFollowing ? 'Following' : 'Follow'}
+                        </Button>
+
+                        {connectionState === 'request_received' ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
+                              Accept
+                            </Button>
+                            <Button size="sm" variant="outline" loading={connectLoading} onClick={handleRejectConnectionRequest}>
+                              Reject
+                            </Button>
+                          </div>
+                        ) : connectionState === 'connected' ? (
+                          <>
+                            <Button size="sm" variant="outline" disabled>
+                              Connected
+                            </Button>
+                            <Button size="sm" variant="secondary" loading={messageLoading} onClick={handleOpenConversation}>
+                              Message
+                            </Button>
+                          </>
+                        ) : connectionState === 'request_sent' ? (
+                          <>
+                            <Button size="sm" variant="outline" disabled>
+                              Request Sent
+                            </Button>
+                            <Button size="sm" variant="outline" disabled>
+                              Message
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button size="sm" variant="secondary" loading={connectLoading} onClick={handleConnect}>
+                              Connect
+                            </Button>
+                            <Button size="sm" variant="outline" disabled>
+                              Message
+                            </Button>
+                          </>
+                        )}
+                      </>
                     ) : isOwnProfile ? (
                       <Link to="/settings">
-                        <Button variant="outline">Edit Profile</Button>
+                        <Button variant="outline" size="sm">
+                          Edit Profile
+                        </Button>
                       </Link>
                     ) : null}
                   </div>
                 </div>
 
+                {actionMessage && (
+                  <div className="mt-4 rounded-3xl border border-orange-300/40 bg-orange-50/80 px-4 py-3 text-sm text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
+                    {actionMessage}
+                  </div>
+                )}
+
                 {profile.headline && (
                   <p className="mt-4 text-lg text-zinc-700 dark:text-zinc-300 leading-8">{profile.headline}</p>
                 )}
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {summaryItems.map((item) => (
                     <div key={item.label} className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3">
                       <p className="text-sm text-zinc-500">{item.label}</p>
@@ -451,6 +688,49 @@ export function ProfilePage() {
           </div>
         </div>
       </motion.div>
+
+      {isOwnProfile && incomingRequests.length > 0 && (
+        <div className="mt-8 rounded-[2rem] border border-orange-200/70 bg-orange-50/60 dark:border-orange-950/50 dark:bg-orange-950/10 shadow-2xl">
+          <div className="px-5 py-5 sm:px-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-500">Connection requests</p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 mt-1">Respond to founders who want to connect with you.</p>
+              </div>
+              <span className="inline-flex items-center rounded-full bg-orange-500 px-3 py-1 text-sm font-semibold text-white">
+                {incomingRequests.length} pending
+              </span>
+            </div>
+          </div>
+          <div className="divide-y divide-orange-200/80 dark:divide-orange-900/60">
+            {incomingRequests.map((request) => (
+              <div key={request.id} className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar src={request.sender?.avatar_url || ''} alt={request.sender?.full_name || request.sender?.username} size="sm" />
+                  <div>
+                    <p className="font-semibold text-zinc-900 dark:text-white">{request.sender?.full_name || request.sender?.username}</p>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">@{request.sender?.username}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" loading={connectLoading} onClick={() => {
+                    setConnectionRequestId(request.id);
+                    handleAcceptConnectionRequest();
+                  }}>
+                    Accept
+                  </Button>
+                  <Button size="sm" variant="outline" loading={connectLoading} onClick={() => {
+                    setConnectionRequestId(request.id);
+                    handleRejectConnectionRequest();
+                  }}>
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
         <div className="flex flex-wrap gap-3 border-b border-zinc-200 dark:border-zinc-800 px-4 py-4 sm:px-6">

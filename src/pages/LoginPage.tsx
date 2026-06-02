@@ -28,11 +28,16 @@ export function LoginPage() {
 
       if (error) throw error;
 
-      if (data.user) {
-        navigate('/');
+      if (!data?.user && !data?.session) {
+        setError('Login succeeded but no active session was returned. Please refresh and try again.');
+        return;
       }
+
+      navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in');
+      console.error('[login] Sign in failed:', err);
+      const message = err?.message || 'Failed to sign in. Please check your credentials and try again.';
+      setError(message);
     } finally {
       setLoading(false);
     }

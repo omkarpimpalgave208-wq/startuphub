@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { X, Loader2, MessageSquare, Heart, User, AtSign } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, Loader2, MessageSquare, Heart, User, UserPlus, CheckCircle, AtSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { Avatar } from './ui/Avatar';
@@ -8,31 +8,47 @@ import { api } from '../lib/api';
 
 interface NotificationsPanelProps {
   onClose: () => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
-export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
+export function NotificationsPanel({ onClose, onUnreadCountChange }: NotificationsPanelProps) {
   const { user } = useAuthStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const fetchIdRef = useRef(0);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setNotifications([]);
+    setError(null);
+    setLoading(true);
     fetchNotifications();
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      return;
+    }
 
-    // REAL-TIME NOTIFICATIONS CHANNEL WITH MEMORY CLEANUP ON UNMOUNT
     const unsubscribe = api.subscribeToChanges(
       `realtime-notifications-${user.id}`,
       'notifications',
-      'INSERT',
+      '*',
       (payload) => {
-        if (payload.new && payload.new.user_id === user.id) {
-          // Trigger reload to load foreign actor relationships correctly
+        if (payload.new?.user_id === user.id || payload.old?.user_id === user.id) {
+          console.info('[NotificationsPanel] Real-time event received:', payload);
           fetchNotifications();
         }
-      }
+      },
+      `user_id=eq.${user.id}`
     );
 
     return () => {
@@ -40,36 +56,74 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
     };
   }, [user]);
 
-  const fetchNotifications = async () => {
-    if (!user) return;
-    
+  const fetchNotifications = async (retryAttempt = 0): Promise<void> => {
+    if (!user) {
+      setNotifications([]);
+      setLoading(false);
+      setError(null);
+      onUnreadCountChange?.(0);
+      return;
+    }
+
+    const currentFetchId = ++fetchIdRef.current;
+    if (!isMountedRef.current) return;
+
+    setLoading(true);
+    setError(null);
+
     try {
       const data = await api.getNotifications(user.id);
+      if (!isMountedRef.current || fetchIdRef.current !== currentFetchId) return;
+
       setNotifications(data);
+      onUnreadCountChange?.(data.filter((notification) => !notification.read).length);
     } catch (err) {
-      console.error('Error fetching notifications:', err);
+      console.error('[NotificationsPanel] Error fetching notifications:', err);
+
+      if (retryAttempt < 2) {
+        const backoff = 1000 * Math.pow(2, retryAttempt);
+        window.setTimeout(() => {
+          if (isMountedRef.current) {
+            fetchNotifications(retryAttempt + 1);
+          }
+        }, backoff);
+      } else {
+        setError('Failed to load notifications. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && fetchIdRef.current === currentFetchId) {
+        setLoading(false);
+      }
     }
   };
 
   const markAsRead = async (id: string) => {
     try {
       await api.markNotificationRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      setNotifications((prev) => {
+        const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+        onUnreadCountChange?.(updated.filter((notification) => !notification.read).length);
+        return updated;
+      });
     } catch (err) {
-      console.error('Error marking as read:', err);
+      console.error('[NotificationsPanel] Error marking as read:', err);
+      setError('Failed to update notification status. Please try again.');
     }
   };
 
   const markAllAsRead = async () => {
     if (!user) return;
-    
+
     try {
       await api.markAllNotificationsRead(user.id);
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setNotifications((prev) => {
+        const updated = prev.map((n) => ({ ...n, read: true }));
+        onUnreadCountChange?.(0);
+        return updated;
+      });
     } catch (err) {
-      console.error('Error marking all as read:', err);
+      console.error('[NotificationsPanel] Error marking all notifications as read:', err);
+      setError('Failed to update notification status. Please try again.');
     }
   };
 
@@ -82,12 +136,24 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
         return <Heart className="w-4 h-4 text-orange-500" />;
       case 'follow':
         return <User className="w-4 h-4 text-green-500" />;
+      case 'connect_request':
+        return <UserPlus className="w-4 h-4 text-sky-500" />;
+      case 'connect_accept':
+        return <CheckCircle className="w-4 h-4 text-emerald-500" />;
+      case 'message':
+        return <MessageSquare className="w-4 h-4 text-sky-500" />;
       default:
         return <AtSign className="w-4 h-4 text-zinc-500" />;
     }
   };
 
   const getNotificationLink = (notification: Notification) => {
+    if (notification.type === 'message' && notification.conversation_id) {
+      return `/messages/${notification.conversation_id}`;
+    }
+    if (notification.type === 'connect_request' || notification.type === 'connect_accept') {
+      return '/connections';
+    }
     if (notification.product_id) {
       return `/product/${notification.product_id}`;
     }
@@ -141,6 +207,16 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 text-zinc-400 animate-spin" />
+            </div>
+          ) : error ? (
+            <div className="px-4 py-8 text-center text-red-500">
+              <p>{error}</p>
+              <button
+                onClick={() => fetchNotifications(0)}
+                className="mt-3 px-4 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium"
+              >
+                Retry
+              </button>
             </div>
           ) : notifications.length === 0 ? (
             <div className="px-4 py-8 text-center text-zinc-500">

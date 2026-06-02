@@ -8,9 +8,17 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 console.log('SUPABASE URL:', supabaseUrl);
 console.log('SUPABASE KEY EXISTS:', !!supabaseAnonKey);
 
-export const supabase: SupabaseClient<any> = createClient(
+export const supabase: SupabaseClient<Database> = createClient(
   supabaseUrl,
-  supabaseAnonKey
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: true,
+      detectSessionInUrl: true,
+      autoRefreshToken: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined
+    }
+  }
 );
 
 export default supabase;
@@ -21,12 +29,19 @@ export interface ProfileRow {
   username: string;
   full_name: string | null;
   avatar_url: string | null;
+  banner_url: string | null;
+  banner_style: string | null;
+  location: string | null;
   headline: string | null;
   bio: string | null;
   website: string | null;
+  website_url: string | null;
   github_url: string | null;
   twitter_url: string | null;
   linkedin_url: string | null;
+  skills: string[];
+  achievements: string[];
+  experience: Array<{ role: string; company: string; period: string; description: string }>;
   created_at: string;
   updated_at: string;
 }
@@ -97,15 +112,53 @@ export interface BookmarkRow {
   created_at: string;
 }
 
+export interface ConnectionRequestRow {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+}
+
+export interface ConnectionRow {
+  id: string;
+  user_one_id: string;
+  user_two_id: string;
+  created_at: string;
+}
+
 export interface NotificationRow {
   id: string;
   user_id: string;
   actor_id: string;
-  type: 'comment' | 'upvote' | 'follow' | 'reply';
+  type: 'comment' | 'upvote' | 'follow' | 'reply' | 'connect_request' | 'connect_accept' | 'message';
   product_id: string | null;
   discussion_id: string | null;
+  conversation_id: string | null;
   message: string;
   read: boolean;
+  created_at: string;
+}
+
+export interface ConversationRow {
+  id: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface ConversationParticipantRow {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface MessageRow {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  is_read: boolean;
   created_at: string;
 }
 
@@ -153,10 +206,40 @@ export type Database = {
         Insert: Partial<BookmarkRow> & { user_id: string };
         Update: Partial<BookmarkRow>;
       };
+      connection_requests: {
+        Row: ConnectionRequestRow;
+        Insert: Partial<ConnectionRequestRow> & { sender_id: string; receiver_id: string; status: 'pending' | 'accepted' | 'rejected' };
+        Update: Partial<ConnectionRequestRow>;
+      };
+      connections: {
+        Row: ConnectionRow;
+        Insert: Partial<ConnectionRow> & { user_one_id: string; user_two_id: string };
+        Update: Partial<ConnectionRow>;
+      };
       notifications: {
         Row: NotificationRow;
-        Insert: Partial<NotificationRow> & { user_id: string; actor_id: string; type: 'comment' | 'upvote' | 'follow' | 'reply'; message: string };
+        Insert: Partial<NotificationRow> & {
+          user_id: string;
+          actor_id: string;
+          type: 'comment' | 'upvote' | 'follow' | 'reply' | 'connect_request' | 'connect_accept' | 'message';
+          message: string;
+        };
         Update: Partial<NotificationRow>;
+      };
+      conversations: {
+        Row: ConversationRow;
+        Insert: Partial<ConversationRow> & { created_by: string };
+        Update: Partial<ConversationRow>;
+      };
+      conversation_participants: {
+        Row: ConversationParticipantRow;
+        Insert: Partial<ConversationParticipantRow> & { conversation_id: string; user_id: string };
+        Update: Partial<ConversationParticipantRow>;
+      };
+      messages: {
+        Row: MessageRow;
+        Insert: Partial<MessageRow> & { conversation_id: string; sender_id: string; content: string };
+        Update: Partial<MessageRow>;
       };
     };
   };

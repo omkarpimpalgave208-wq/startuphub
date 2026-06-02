@@ -18,11 +18,13 @@ export function SignupPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setMessage('');
 
     try {
       // Sign up with Supabase Auth
@@ -40,11 +42,18 @@ export function SignupPage() {
 
       if (authError) throw authError;
 
-      if (authData.user) {
+      if (authData.user || authData.session) {
         navigate('/');
+        return;
       }
+
+      setMessage(
+        'A confirmation email has been sent. Please verify your email address before signing in.'
+      );
     } catch (err: any) {
-      setError(err.message || 'Failed to create account');
+      console.error('[signup] Account creation failed:', err);
+      const message = err?.message || 'Failed to create account. Please try again.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -81,6 +90,12 @@ export function SignupPage() {
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
               {error}
+            </div>
+          )}
+
+          {message && (
+            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200 rounded-lg text-sm">
+              {message}
             </div>
           )}
 

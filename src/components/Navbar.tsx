@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -11,10 +11,13 @@ import {
   User,
   Settings,
   LogOut,
-  Bookmark
+  Bookmark,
+  MessageSquare,
+  UserPlus
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
+import { api } from '../lib/api';
 import { Button } from './ui/Button';
 import { Avatar } from './ui/Avatar';
 import { Dropdown, DropdownItem, DropdownDivider } from './ui/Dropdown';
@@ -23,7 +26,95 @@ import { NotificationsPanel } from './NotificationsPanel';import { Logo } from '
 export function Navbar() {
   const { user, profile, signOut } = useAuthStore();
   const { darkMode, toggleDarkMode, sidebarOpen, setSidebarOpen, setSearchOpen, searchOpen, notificationsOpen, setNotificationsOpen } = useUIStore();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const navigate = useNavigate();
+
+  const refreshUnreadCount = async () => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    try {
+      const notifications = await api.getNotifications(user.id, true);
+      setUnreadCount(notifications.length);
+    } catch (err) {
+      console.error('Error fetching unread notifications:', err);
+    }
+  };
+
+  const refreshUnreadMessagesCount = async () => {
+    if (!user) {
+      setUnreadMessagesCount(0);
+      return;
+    }
+
+    try {
+      const count = await api.getUnreadMessagesCount(user.id);
+      setUnreadMessagesCount(count);
+    } catch (err) {
+      console.error('Error fetching unread message count:', err);
+    }
+  };
+
+  useEffect(() => {
+    refreshUnreadCount();
+    refreshUnreadMessagesCount();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = api.subscribeToChanges(
+      `notifications-unread-${user.id}`,
+      'notifications',
+      '*',
+      (payload) => {
+        console.info('[Navbar] Real-time notification event:', payload);
+        refreshUnreadCount();
+      },
+      `user_id=eq.${user.id}`
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribeParticipants = api.subscribeToChanges(
+      `messages-participants-${user.id}`,
+      'conversation_participants',
+      '*',
+      () => {
+        refreshUnreadMessagesCount();
+      },
+      `user_id=eq.${user.id}`
+    );
+
+    const unsubscribeMessages = api.subscribeToChanges(
+      `messages-realtime-${user.id}`,
+      'messages',
+      '*',
+      () => {
+        refreshUnreadMessagesCount();
+      },
+      `sender_id=neq.${user.id}`
+    );
+
+    return () => {
+      unsubscribeParticipants();
+      unsubscribeMessages();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    refreshUnreadCount();
+  }, [notificationsOpen]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -108,12 +199,29 @@ export function Navbar() {
 
                   {/* Notifications */}
                   <button
+                    onClick={() => navigate('/messages')}
+                    className="relative p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
+                    aria-label="Messages"
+                  >
+                    <MessageSquare className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+                    {unreadMessagesCount > 0 && (
+                      <span className="absolute top-1 right-1 min-w-[1rem] h-4 rounded-full bg-sky-500 text-[10px] text-white font-semibold flex items-center justify-center px-1.5">
+                        {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
                     onClick={() => setNotificationsOpen(!notificationsOpen)}
                     className="relative p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
                     aria-label="Notifications"
                   >
                     <Bell className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 min-w-[1rem] h-4 rounded-full bg-orange-500 text-[10px] text-white font-semibold flex items-center justify-center px-1.5">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
                   </button>
 
                   {/* User menu */}
@@ -139,6 +247,18 @@ export function Navbar() {
                         onClick={() => navigate(`/profile/${profile?.username}`)}
                       >
                         Profile
+                      </DropdownItem>
+                      <DropdownItem 
+                        icon={<MessageSquare className="w-4 h-4" />}
+                        onClick={() => navigate('/messages')}
+                      >
+                        Messages
+                      </DropdownItem>
+                      <DropdownItem 
+                        icon={<UserPlus className="w-4 h-4" />}
+                        onClick={() => navigate('/connections')}
+                      >
+                        Connections
                       </DropdownItem>
                       <DropdownItem 
                         icon={<Bookmark className="w-4 h-4" />}
@@ -193,7 +313,7 @@ export function Navbar() {
 
       {/* Notifications Panel */}
       {notificationsOpen && (
-        <NotificationsPanel onClose={() => setNotificationsOpen(false)} />
+        <NotificationsPanel onClose={() => setNotificationsOpen(false)} onUnreadCountChange={setUnreadCount} />
       )}
     </>
   );

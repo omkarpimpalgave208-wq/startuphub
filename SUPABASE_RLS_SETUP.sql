@@ -50,6 +50,78 @@ CREATE POLICY "authenticated_update_own_products" ON products
   WITH CHECK (user_id = auth.uid());
 
 -- =====================================================
+-- 6. CONNECTION REQUESTS RLS SETUP
+-- =====================================================
+ALTER TABLE connection_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated_send_connection_requests" ON connection_requests
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = sender_id);
+
+CREATE POLICY "allow_request_participants_to_select_connection_requests" ON connection_requests
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR status = 'accepted');
+
+CREATE POLICY "allow_recipient_to_respond_to_connection_requests" ON connection_requests
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = receiver_id AND status = 'pending')
+  WITH CHECK (status IN ('accepted', 'rejected'));
+
+CREATE POLICY "allow_request_participants_to_delete_connection_requests" ON connection_requests
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+
+-- =====================================================
+-- 7. CONNECTIONS RLS SETUP
+-- =====================================================
+ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated_create_connections" ON connections
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_one_id OR auth.uid() = user_two_id);
+
+CREATE POLICY "allow_users_to_read_their_connections" ON connections
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_one_id OR auth.uid() = user_two_id);
+
+CREATE POLICY "allow_users_to_delete_their_connections" ON connections
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_one_id OR auth.uid() = user_two_id);
+
+-- =====================================================
+-- 8. NOTIFICATIONS RLS SETUP
+-- =====================================================
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated_create_notifications" ON notifications
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = actor_id);
+
+CREATE POLICY "allow_users_to_read_their_notifications" ON notifications
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "allow_users_to_update_their_notifications" ON notifications
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "allow_users_to_delete_their_notifications" ON notifications
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- =====================================================
 -- Verification: Check that RLS is enabled and policies are active
 -- =====================================================
 -- Run this query to verify RLS setup:

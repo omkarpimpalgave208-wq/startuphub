@@ -63,55 +63,123 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const projectRef = supabaseUrl ? supabaseUrl.split('.')[0].split('//').pop() : '';
     const storageKey = projectRef ? `sb-${projectRef}-auth-token` : '';
 
-    try {
-      handleGoogleRedirect();
-      
-      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
-      
-      if (sessionErr) {
-        console.warn('[auth] Session retrieval error, executing clean reset.');
-        if (storageKey) localStorage.removeItem(storageKey);
+    const decodeJwtPayload = (token?: string) => {
+      if (!token || typeof window === 'undefined') return null;
+      try {
+        const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(decodeURIComponent(escape(window.atob(base64))));
+        return payload;
+      } catch (decodeError) {
+        console.warn('[auth] JWT payload decode failed:', decodeError);
+        return null;
+      }
+    };
+
+    const isSessionFromCurrentProject = (accessToken?: string) => {
+      if (!accessToken || !supabaseUrl) return true;
+      const payload = decodeJwtPayload(accessToken);
+      if (!payload) return false;
+      const issuer = typeof payload.iss === 'string' ? payload.iss : '';
+      return issuer.includes(projectRef || '') || issuer.includes(supabaseUrl);
+    };
+
+    const clearStaleSession = async (reason: string) => {
+      console.warn('[auth] Clearing stale or invalid session:', reason);
+      if (storageKey) localStorage.removeItem(storageKey);
+      try {
         await supabase.auth.signOut();
-        set({ user: null, profile: null });
+      } catch (signOutError) {
+        console.error('[auth] Sign out failed during stale session cleanup:', signOutError);
+      }
+      set({ user: null, profile: null });
+    };
+
+    const createFallbackProfile = async (user: any): Promise<Profile | null> => {
+      let profile = await api.getProfile(user.id);
+      if (profile) return profile;
+
+      console.warn('[auth] Missing profile detected for authenticated user, attempting to create one.', {
+        userId: user.id,
+        email: user.email
+      });
+
+      try {
+        profile = await api.createProfileFromAuthUser(user);
+        console.info('[auth] Created missing profile for user:', user.id);
+        return profile;
+      } catch (profileCreationError) {
+        console.error('[auth] Failed to create fallback profile:', profileCreationError);
+        return {
+          id: user.id,
+          username: user.user_metadata?.username || user.email?.split('@')[0] || user.id,
+          full_name: user.user_metadata?.full_name || null,
+          avatar_url: null,
+          banner_url: null,
+          banner_style: null,
+          location: null,
+          headline: null,
+          bio: null,
+          website: null,
+          website_url: null,
+          github_url: null,
+          twitter_url: null,
+          linkedin_url: null,
+          skills: [],
+          achievements: [],
+          experience: [],
+          products: 0,
+          followers: 0,
+          following: 0,
+          connections: 0
+        } as Profile;
+      }
+    };
+
+    try {
+      await handleGoogleRedirect();
+
+      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+      console.debug('[auth] Session retrieval:', { session, sessionErr });
+
+      if (sessionErr) {
+        console.warn('[auth] Session retrieval error, executing clean reset.', sessionErr.message || sessionErr);
+        await clearStaleSession('session retrieval error');
       }
 
-      if (session?.user) {
-        // ENFORCE ISOLATION: Confirm the user exists in this project's database
-        try {
-          const profile = await api.getProfile(session.user.id);
-          if (!profile) {
-            // Profile is missing, which could indicate a cross-project token leak!
-            throw new Error('User identity profile missing in current database schema.');
-          }
-          set({ user: session.user, profile });
-        } catch (profileErr) {
-          console.warn('[auth] Identity mismatch or cross-project token leakage detected. Forcing clean re-auth.', profileErr);
-          if (storageKey) localStorage.removeItem(storageKey);
-          await supabase.auth.signOut();
-          set({ user: null, profile: null });
-        }
+      if (session?.access_token && !isSessionFromCurrentProject(session.access_token)) {
+        await clearStaleSession('cross-project token detected');
+        set({ loading: false });
+        return;
       }
+
+      if (!session?.user) {
+        console.log('[auth] No active session found during auth initialization.');
+        set({ user: null, profile: null });
+        return;
+      }
+
+      const profile = await createFallbackProfile(session.user);
+      set({ user: session.user, profile });
     } catch (err) {
       console.error('Auth initialization error:', err);
+      await clearStaleSession('auth initialization exception');
     } finally {
       set({ loading: false });
     }
-    
+
     // TAB SYNCHRONIZATION AND LEAKAGE LISTENER
     supabase.auth.onAuthStateChange(async (event, session) => {
+      const currentUser = get().user;
+      const currentProfile = get().profile;
+
       if (session?.user) {
-        const currentUser = get().user;
-        if (!currentUser || currentUser.id !== session.user.id) {
-          // Double check database identity to prevent unauthorized cross-project transitions
+        if (!currentUser || currentUser.id !== session.user.id || !currentProfile) {
           try {
-            const profile = await api.getProfile(session.user.id);
-            if (!profile) throw new Error('Missing profile record.');
+            const profile = await createFallbackProfile(session.user);
             set({ user: session.user, profile });
           } catch (err) {
             console.warn('[auth] Mismatched auth state transition blocked.', err);
-            if (storageKey) localStorage.removeItem(storageKey);
-            await supabase.auth.signOut();
-            set({ user: null, profile: null });
+            await clearStaleSession('auth state transition mismatch');
           }
         }
       } else {

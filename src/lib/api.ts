@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Product, Profile, Comment, Discussion, Notification, Bookmark } from '../types';
+import type { Product, Profile, Comment, Discussion, Notification, Bookmark, Message, Conversation } from '../types';
 
 const STORAGE_BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET ?? 'products';
 
@@ -172,8 +172,9 @@ export const api = {
     category?: string; 
     limit?: number; 
     offset?: number; 
+    userId?: string;
   } = {}): Promise<Discussion[]> {
-    const { trending = false, category, limit = 20, offset = 0 } = options;
+    const { trending = false, category, limit = 20, offset = 0, userId } = options;
 
     let query = supabase
       .from('discussions')
@@ -183,6 +184,10 @@ export const api = {
         comments:comments (count),
         upvotes:discussion_upvotes (count)
       `);
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
 
     if (category && category !== 'all') {
       // Capitalize first letter to match discussion categories
@@ -310,28 +315,76 @@ export const api = {
 
     // Direct, secure notification creation for commenting inside API layer!
     try {
-      if (commentData.product_id) {
-        const product = await this.getProduct(commentData.product_id);
-        if (product && product.user_id !== commentData.user_id) {
-          await supabase.from('notifications').insert({
-            user_id: product.user_id,
-            type: 'comment',
-            actor_id: commentData.user_id,
-            product_id: commentData.product_id,
-            message: `commented on your product "${product.name}"`
-          });
+      const isReply = Boolean(commentData.parent_id);
+      let repliedToUserId: string | null = null;
+
+      if (isReply) {
+        const { data: parentComment, error: parentCommentError } = await supabase
+          .from('comments')
+          .select('id, user_id, product_id, discussion_id')
+          .eq('id', commentData.parent_id)
+          .single();
+
+        if (parentCommentError) throw parentCommentError;
+        repliedToUserId = parentComment?.user_id || null;
+      }
+
+      if (!isReply) {
+        if (commentData.product_id) {
+          const product = await this.getProduct(commentData.product_id);
+          if (product && product.user_id !== commentData.user_id) {
+            await supabase.from('notifications').insert({
+              user_id: product.user_id,
+              type: 'comment',
+              actor_id: commentData.user_id,
+              product_id: commentData.product_id,
+              message: `commented on your product "${product.name}"`
+            });
+            console.info('[API] Created product comment notification', {
+              recipient: product.user_id,
+              actor: commentData.user_id,
+              productId: commentData.product_id
+            });
+          }
+        } else if (commentData.discussion_id) {
+          const discussion = await this.getDiscussion(commentData.discussion_id);
+          if (discussion && discussion.user_id !== commentData.user_id) {
+            await supabase.from('notifications').insert({
+              user_id: discussion.user_id,
+              type: 'comment',
+              actor_id: commentData.user_id,
+              discussion_id: commentData.discussion_id,
+              message: `commented on your discussion "${discussion.title}"`
+            });
+            console.info('[API] Created discussion comment notification', {
+              recipient: discussion.user_id,
+              actor: commentData.user_id,
+              discussionId: commentData.discussion_id
+            });
+          }
         }
-      } else if (commentData.discussion_id) {
-        const discussion = await this.getDiscussion(commentData.discussion_id);
-        if (discussion && discussion.user_id !== commentData.user_id) {
-          await supabase.from('notifications').insert({
-            user_id: discussion.user_id,
-            type: 'comment',
-            actor_id: commentData.user_id,
-            discussion_id: commentData.discussion_id,
-            message: `commented on your discussion "${discussion.title}"`
-          });
-        }
+      }
+
+      if (isReply && repliedToUserId && repliedToUserId !== commentData.user_id) {
+        const replyTarget = commentData.product_id
+          ? `product "${(await this.getProduct(commentData.product_id))?.name || 'your product'}"`
+          : commentData.discussion_id
+          ? `discussion "${(await this.getDiscussion(commentData.discussion_id))?.title || 'your discussion'}"`
+          : 'your comment';
+
+        await supabase.from('notifications').insert({
+          user_id: repliedToUserId,
+          type: 'reply',
+          actor_id: commentData.user_id,
+          product_id: commentData.product_id || null,
+          discussion_id: commentData.discussion_id || null,
+          message: `replied to your comment in ${replyTarget}`
+        });
+        console.info('[API] Created reply notification', {
+          recipient: repliedToUserId,
+          actor: commentData.user_id,
+          parentCommentId: commentData.parent_id
+        });
       }
     } catch (notifErr) {
       console.error('[API] Failed to trigger comment notification:', notifErr);
@@ -418,7 +471,13 @@ export const api = {
       .from('discussion_upvotes')
       .insert({ user_id: userId, discussion_id: discussionId });
 
-    if (error && error.code !== '23505') throw error;
+    if (error) {
+      if (error.code === '23505') {
+        console.info('[API] Duplicate discussion upvote ignored, no notification sent', { userId, discussionId });
+        return;
+      }
+      throw error;
+    }
 
     const { error: rpcErr } = await supabase.rpc('increment_discussion_upvote_count', { discussion_id: discussionId });
     if (rpcErr) console.error('[API] increment RPC failed:', rpcErr);
@@ -520,7 +579,6 @@ export const api = {
 
     if (error && error.code !== '23505') throw error;
 
-    // Insert follow notification in background
     try {
       await supabase.from('notifications').insert({
         user_id: followedId,
@@ -543,10 +601,299 @@ export const api = {
     if (error) throw error;
   },
 
+  async getConnectionCount(userId: string): Promise<number> {
+    const { data, error } = await supabase
+      .from('connections')
+      .select('id')
+      .or(`user_one_id.eq.${userId},user_two_id.eq.${userId}`);
+
+    if (error) throw error;
+    return (data || []).length;
+  },
+
+  async getConnectionStatus(userId: string, profileId: string): Promise<{ state: 'none' | 'request_sent' | 'request_received' | 'connected'; requestId?: string }> {
+    const { data: connection, error: connectionError } = await supabase
+      .from('connections')
+      .select('id')
+      .or(
+        `and(user_one_id.eq.${userId},user_two_id.eq.${profileId}),and(user_one_id.eq.${profileId},user_two_id.eq.${userId})`
+      )
+      .limit(1)
+      .single();
+
+    if (connectionError && connectionError.code !== 'PGRST116') throw connectionError;
+    if (connection) {
+      return { state: 'connected' };
+    }
+
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('*')
+      .or(
+        `and(sender_id.eq.${userId},receiver_id.eq.${profileId}),and(sender_id.eq.${profileId},receiver_id.eq.${userId})`
+      )
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    if (!data) return { state: 'none' };
+
+    if (data.status === 'accepted') {
+      return { state: 'connected', requestId: data.id };
+    }
+
+    if (data.status === 'pending') {
+      if (data.sender_id === userId) {
+        return { state: 'request_sent', requestId: data.id };
+      }
+      return { state: 'request_received', requestId: data.id };
+    }
+
+    return { state: 'none' };
+  },
+
+  async getIncomingConnectionRequests(userId: string): Promise<ConnectionRequest[]> {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('id, sender_id, receiver_id, status, created_at, sender:sender_id (id, username, full_name, avatar_url)')
+      .eq('receiver_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as unknown as ConnectionRequest[];
+  },
+
+  async getSentConnectionRequests(userId: string): Promise<ConnectionRequest[]> {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('id, sender_id, receiver_id, status, created_at, receiver:receiver_id (id, username, full_name, avatar_url)')
+      .eq('sender_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as unknown as ConnectionRequest[];
+  },
+
+  async sendConnectionRequest(senderId: string, receiverId: string): Promise<void> {
+    if (senderId === receiverId) {
+      throw new Error('You cannot send a connection request to yourself.');
+    }
+
+    const { data: connection, error: connectionError } = await supabase
+      .from('connections')
+      .select('id')
+      .or(
+        `and(user_one_id.eq.${senderId},user_two_id.eq.${receiverId}),and(user_one_id.eq.${receiverId},user_two_id.eq.${senderId})`
+      )
+      .limit(1)
+      .single();
+
+    if (connectionError && connectionError.code !== 'PGRST116') throw connectionError;
+    if (connection) {
+      throw new Error('You are already connected with this user.');
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from('connection_requests')
+      .select('id,status,sender_id,receiver_id')
+      .or(
+        `and(sender_id.eq.${senderId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${senderId})`
+      )
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (existingError) throw existingError;
+    if (existing && existing.length > 0) {
+      const request = existing[0] as ConnectionRequest;
+      if (request.status === 'pending') {
+        throw new Error('A connection request already exists between these users.');
+      }
+      if (request.status === 'accepted') {
+        throw new Error('You are already connected with this user.');
+      }
+    }
+
+    const { error } = await supabase
+      .from('connection_requests')
+      .insert({ sender_id: senderId, receiver_id: receiverId, status: 'pending' });
+
+    if (error) throw error;
+
+    try {
+      await supabase.from('notifications').insert({
+        user_id: receiverId,
+        actor_id: senderId,
+        type: 'connect_request',
+        message: 'sent you a connection request'
+      });
+    } catch (notifErr) {
+      console.error('[API] Failed to send connection notification:', notifErr);
+    }
+  },
+
+  async acceptConnectionRequest(requestId: string, receiverId: string): Promise<void> {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .update({ status: 'accepted' })
+      .match({ id: requestId, receiver_id: receiverId, status: 'pending' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Connection request not found or already responded to.');
+
+    const [userOneId, userTwoId] = [data.sender_id, data.receiver_id].sort();
+    const { error: connectionError } = await supabase
+      .from('connections')
+      .insert({ user_one_id: userOneId, user_two_id: userTwoId });
+
+    if (connectionError && connectionError.code !== '23505') {
+      console.error('[API] Failed to insert connection record:', connectionError);
+      throw connectionError;
+    }
+
+    try {
+      await supabase.from('notifications').insert({
+        user_id: data.sender_id,
+        actor_id: receiverId,
+        type: 'connect_accept',
+        message: 'accepted your connection request'
+      });
+    } catch (notifErr) {
+      console.error('[API] Failed to send connection accepted notification:', notifErr);
+    }
+  },
+
+  async rejectConnectionRequest(requestId: string, receiverId: string): Promise<void> {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .update({ status: 'rejected' })
+      .match({ id: requestId, receiver_id: receiverId, status: 'pending' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Connection request not found or already responded to.');
+  },
+
   // ==========================================
   // 5. PROFILES & STORAGE API
   // ==========================================
+  normalizeProfileRow(data: Record<string, unknown>): Profile {
+    const website = (data.website as string | null) || (data.website_url as string | null) || null;
+    const website_url = (data.website_url as string | null) || (data.website as string | null) || null;
+    const skills = Array.isArray(data.skills) ? data.skills : [];
+    const achievements = Array.isArray(data.achievements) ? data.achievements : [];
+    const experience = Array.isArray(data.experience) ? data.experience : [];
+
+    const products = Array.isArray(data.products) && data.products.length > 0
+      ? ((data.products[0] as Record<string, unknown>).count as number) || 0
+      : 0;
+    const followers = Array.isArray(data.followers) && data.followers.length > 0
+      ? ((data.followers[0] as Record<string, unknown>).count as number) || 0
+      : 0;
+    const following = Array.isArray(data.following) && data.following.length > 0
+      ? ((data.following[0] as Record<string, unknown>).count as number) || 0
+      : 0;
+    const connections = typeof data.connections === 'number' ? data.connections : 0;
+
+    const row = data as Record<string, unknown>;
+    return {
+      ...row,
+      website,
+      website_url,
+      skills,
+      achievements,
+      experience,
+      products,
+      followers,
+      following,
+      connections
+    } as Profile;
+  },
+
+  async generateUniqueUsername(baseUsername: string): Promise<string> {
+    let username = baseUsername.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!username || username.length < 3) {
+      username = `user${Math.floor(Math.random() * 90000) + 10000}`;
+    }
+
+    let attempts = 0;
+    while (attempts < 5) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', username)
+        .limit(1);
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        return username;
+      }
+
+      username = `${username}${Math.floor(Math.random() * 900)}`;
+      attempts += 1;
+    }
+
+    return `${baseUsername.slice(0, 8)}${Math.floor(Math.random() * 90000) + 10000}`;
+  },
+
+  async createProfileFromAuthUser(user: Record<string, unknown>): Promise<Profile> {
+    const userId = typeof user.id === 'string' ? user.id : '';
+    const email = typeof user.email === 'string' ? user.email : undefined;
+    const metadata = typeof user.user_metadata === 'object' && user.user_metadata !== null ? user.user_metadata as Record<string, unknown> : {};
+
+    console.info('[api] Creating fallback profile for authenticated user', { userId, email });
+
+    const candidate = typeof metadata.username === 'string'
+      ? metadata.username
+      : email?.split('@')[0];
+    const username = await this.generateUniqueUsername(candidate || `user${userId.slice(0, 8)}`);
+    const full_name = typeof metadata.full_name === 'string' ? metadata.full_name : null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.from('profiles') as any)
+      .insert({
+        id: user.id,
+        username,
+        full_name,
+        avatar_url: null,
+        banner_url: null,
+        banner_style: null,
+        location: null,
+        headline: null,
+        bio: null,
+        website: null,
+        website_url: null,
+        github_url: null,
+        twitter_url: null,
+        linkedin_url: null,
+        skills: [],
+        achievements: [],
+        experience: []
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[api] Failed to create fallback profile:', error);
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error('Fallback profile creation returned no data.');
+    }
+
+    return this.normalizeProfileRow(data);
+  },
+
   async getProfile(userId: string): Promise<Profile | null> {
+    console.debug('[api.getProfile] Looking up profile for userId:', userId);
     const { data, error } = await supabase
       .from('profiles')
       .select(`
@@ -559,20 +906,28 @@ export const api = {
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') return null;
+      if (error.code === 'PGRST116') {
+        console.warn('[api.getProfile] No profile row found for userId:', userId);
+        return null;
+      }
       throw error;
     }
+
+    const { data: connectionsData, error: connectionsError } = await supabase
+      .from('connections')
+      .select('id')
+      .or(`user_one_id.eq.${userId},user_two_id.eq.${userId}`);
+
+    if (connectionsError) throw connectionsError;
     
-    // Standardize mapping counters for UI compatibility
-    return {
+    return this.normalizeProfileRow({
       ...data,
-      products: data.products?.[0]?.count || 0,
-      followers: data.followers?.[0]?.count || 0,
-      following: data.following?.[0]?.count || 0
-    } as unknown as Profile;
+      connections: (connectionsData || []).length
+    });
   },
 
   async getProfileByUsername(username: string): Promise<Profile | null> {
+    console.debug('[api.getProfileByUsername] Looking up profile for username:', username);
     const { data, error } = await supabase
       .from('profiles')
       .select(`
@@ -588,13 +943,18 @@ export const api = {
       if (error.code === 'PGRST116') return null;
       throw error;
     }
-    
-    return {
+
+    const { data: connectionsData, error: connectionsError } = await supabase
+      .from('connections')
+      .select('id')
+      .or(`user_one_id.eq.${data.id},user_two_id.eq.${data.id}`);
+
+    if (connectionsError) throw connectionsError;
+
+    return this.normalizeProfileRow({
       ...data,
-      products: data.products?.[0]?.count || 0,
-      followers: data.followers?.[0]?.count || 0,
-      following: data.following?.[0]?.count || 0
-    } as unknown as Profile;
+      connections: (connectionsData || []).length
+    });
   },
 
   async updateProfile(userId: string, updates: Partial<Profile>): Promise<Profile> {
@@ -706,6 +1066,245 @@ export const api = {
     if (error) throw error;
   },
 
+  async getUnreadMessagesCount(userId: string): Promise<number> {
+    const { data: participantRows, error: participantError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', userId);
+
+    if (participantError) throw participantError;
+
+    const conversationIds = (participantRows || []).map((row) => row.conversation_id).filter(Boolean);
+    if (conversationIds.length === 0) return 0;
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id')
+      .neq('sender_id', userId)
+      .eq('is_read', false)
+      .in('conversation_id', conversationIds);
+
+    if (error) throw error;
+    return (data || []).length;
+  },
+
+  async getConversationsForUser(userId: string): Promise<Conversation[]> {
+    const { data, error } = await supabase
+      .from('conversation_participants')
+      .select(`
+        conversation:conversation_id (
+          id,
+          created_at,
+          participants:conversation_participants (
+            user_id,
+            profiles:user_id (*)
+          ),
+          messages:messages (
+            id,
+            content,
+            sender_id,
+            is_read,
+            created_at
+          )
+        )
+      `)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    const conversations = (data || []).map((row) => {
+      const conversation = row.conversation as Record<string, unknown>;
+      const participantsData = Array.isArray(conversation.participants) ? conversation.participants : [];
+      const messagesData = Array.isArray(conversation.messages) ? conversation.messages : [];
+
+      const participants = participantsData
+        .map((participant: any) => participant.profiles)
+        .filter(Boolean) as Profile[];
+
+      const partner = participants.find((participant) => participant.id !== userId) || participants[0];
+      const sortedMessages = [...messagesData].sort(
+        (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      const lastMessage = sortedMessages[sortedMessages.length - 1];
+
+      return {
+        id: conversation.id as string,
+        created_at: conversation.created_at as string,
+        participants,
+        partner,
+        last_message: lastMessage ? (lastMessage.content as string) : undefined,
+        last_message_at: lastMessage ? (lastMessage.created_at as string) : undefined,
+        unread_count: sortedMessages.filter((message: any) => !message.is_read && message.sender_id !== userId).length
+      } as Conversation;
+    });
+
+    return conversations.sort((a, b) => {
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : new Date(a.created_at).getTime();
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : new Date(b.created_at).getTime();
+      return bTime - aTime;
+    });
+  },
+
+  async getConversation(conversationId: string, userId: string): Promise<Conversation | null> {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select(`
+        *,
+        participants:conversation_participants (
+          user_id,
+          profiles:user_id (*)
+        ),
+        messages:messages (
+          *,
+          sender:sender_id (*)
+        )
+      `)
+      .eq('id', conversationId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw error;
+    }
+
+    const participantsData = Array.isArray(data.participants) ? data.participants : [];
+    const messagesData = Array.isArray(data.messages) ? data.messages : [];
+
+    const participants = participantsData
+      .map((participant: any) => participant.profiles)
+      .filter(Boolean) as Profile[];
+
+    const sortedMessages = [...messagesData].sort(
+      (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    return {
+      id: data.id,
+      created_at: data.created_at,
+      participants,
+      partner: participants.find((participant) => participant.id !== userId) || participants[0],
+      messages: sortedMessages as Message[],
+      unread_count: sortedMessages.filter((message: any) => !message.is_read && message.sender_id !== userId).length,
+      last_message: sortedMessages.length > 0 ? (sortedMessages[sortedMessages.length - 1].content as string) : undefined,
+      last_message_at: sortedMessages.length > 0 ? (sortedMessages[sortedMessages.length - 1].created_at as string) : undefined,
+    } as Conversation;
+  },
+
+  async openConversation(userId: string, otherUserId: string): Promise<Conversation> {
+    if (userId === otherUserId) {
+      throw new Error('You cannot open a conversation with yourself.');
+    }
+
+    const connectionStatus = await this.getConnectionStatus(userId, otherUserId);
+    if (connectionStatus.state !== 'connected') {
+      throw new Error('You must connect with this user before messaging them.');
+    }
+
+    const { data: participantRows, error: participantError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id,user_id')
+      .in('user_id', [userId, otherUserId]);
+
+    if (participantError) throw participantError;
+
+    const conversationMap: Record<string, Set<string>> = {};
+    (participantRows || []).forEach((row) => {
+      if (!row.conversation_id) return;
+      conversationMap[row.conversation_id] = conversationMap[row.conversation_id] || new Set();
+      conversationMap[row.conversation_id].add(row.user_id);
+    });
+
+    const existingConversationId = Object.entries(conversationMap).find(
+      ([, participants]) => participants.has(userId) && participants.has(otherUserId) && participants.size === 2
+    )?.[0];
+
+    if (existingConversationId) {
+      const conversation = await this.getConversation(existingConversationId, userId);
+      if (!conversation) throw new Error('Unable to load conversation.');
+      return conversation;
+    }
+
+    const { data: conversationData, error: conversationError } = await supabase
+      .from('conversations')
+      .insert({ created_by: userId })
+      .select()
+      .single();
+
+    if (conversationError || !conversationData) {
+      throw conversationError || new Error('Failed to create a new conversation.');
+    }
+
+    const { error: participantsError } = await supabase
+      .from('conversation_participants')
+      .insert([
+        { conversation_id: conversationData.id, user_id: userId },
+        { conversation_id: conversationData.id, user_id: otherUserId }
+      ]);
+
+    if (participantsError) throw participantsError;
+
+    const conversation = await this.getConversation(conversationData.id, userId);
+    if (!conversation) throw new Error('Unable to load newly created conversation.');
+    return conversation;
+  },
+
+  async sendMessage(conversationId: string, senderId: string, content: string): Promise<Message> {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new Error('Message content cannot be empty.');
+    }
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({ conversation_id: conversationId, sender_id: senderId, content: trimmed })
+      .select(`*, sender:sender_id (*)`)
+      .single();
+
+    if (error) throw error;
+
+    const { data: participantRows, error: participantError } = await supabase
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId);
+
+    if (participantError) {
+      console.error('[API] Failed to load conversation participants for message notification:', participantError);
+    } else {
+      const recipients = (participantRows || [])
+        .map((row) => row.user_id)
+        .filter((userId) => userId !== senderId);
+
+      if (recipients.length > 0) {
+        try {
+          await supabase.from('notifications').insert(
+            recipients.map((recipientId) => ({
+              user_id: recipientId,
+              actor_id: senderId,
+              conversation_id: conversationId,
+              type: 'message',
+              message: 'sent you a message'
+            }))
+          );
+        } catch (notificationError) {
+          console.error('[API] Failed to create message notification:', notificationError);
+        }
+      }
+    }
+
+    return data as unknown as Message;
+  },
+
+  async markConversationMessagesRead(conversationId: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .eq('conversation_id', conversationId)
+      .neq('sender_id', userId)
+      .eq('is_read', false);
+
+    if (error) throw error;
+  },
+
   async searchAll(queryStr: string): Promise<{ products: Product[]; profiles: Profile[]; discussions: Discussion[] }> {
     if (!queryStr.trim()) return { products: [], profiles: [], discussions: [] };
 
@@ -753,16 +1352,18 @@ export const api = {
     channelName: string,
     tableName: string,
     event: 'INSERT' | 'UPDATE' | 'DELETE' | '*',
-    callback: (payload: any) => void
+    callback: (payload: any) => void,
+    filter?: string
   ): () => void {
-    const channel = supabase
+    const subscription = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
         {
           event,
           schema: 'public',
-          table: tableName
+          table: tableName,
+          filter
         },
         (payload) => {
           callback(payload);
@@ -770,9 +1371,8 @@ export const api = {
       )
       .subscribe();
 
-    // Return the clean unsubscription cleanup handler to avoid memory leakage!
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(subscription);
     };
   }
 };

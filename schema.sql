@@ -104,20 +104,46 @@ create table if not exists public.bookmarks (
   )
 );
 
+-- 9. CONVERSATIONS TABLE
+create table if not exists public.conversations (
+  id uuid default gen_random_uuid() primary key,
+  created_by uuid references public.profiles(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 10. CONVERSATION PARTICIPANTS TABLE
+create table if not exists public.conversation_participants (
+  id uuid default gen_random_uuid() primary key,
+  conversation_id uuid references public.conversations(id) on delete cascade not null,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(conversation_id, user_id)
+);
+
+-- 11. MESSAGES TABLE
+create table if not exists public.messages (
+  id uuid default gen_random_uuid() primary key,
+  conversation_id uuid references public.conversations(id) on delete cascade not null,
+  sender_id uuid references public.profiles(id) on delete cascade not null,
+  content text not null,
+  is_read boolean default false not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- 9. NOTIFICATIONS TABLE
 create table if not exists public.notifications (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references public.profiles(id) on delete cascade not null,
   actor_id uuid references public.profiles(id) on delete cascade not null,
-  type text not null check (type in ('comment', 'upvote', 'follow', 'reply')),
+  type text not null check (type in ('comment', 'upvote', 'follow', 'reply', 'connect_request', 'connect_accept', 'message')),
   product_id uuid references public.products(id) on delete cascade,
   discussion_id uuid references public.discussions(id) on delete cascade,
+  conversation_id uuid references public.conversations(id) on delete cascade,
   message text not null,
   read boolean default false not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- INDEXES FOR FASTER PERFORMANCE
 create index if not exists products_user_id_idx on public.products(user_id);
 create index if not exists upvotes_product_id_idx on public.upvotes(product_id);
 create index if not exists upvotes_user_id_idx on public.upvotes(user_id);
@@ -130,6 +156,13 @@ create index if not exists follows_followed_id_idx on public.follows(followed_id
 create index if not exists bookmarks_user_id_idx on public.bookmarks(user_id);
 create index if not exists notifications_user_id_idx on public.notifications(user_id);
 create index if not exists notifications_read_idx on public.notifications(read);
+create index if not exists notifications_conversation_id_idx on public.notifications(conversation_id);
+create index if not exists conversations_created_by_idx on public.conversations(created_by);
+create index if not exists conversation_participants_conversation_id_idx on public.conversation_participants(conversation_id);
+create index if not exists conversation_participants_user_id_idx on public.conversation_participants(user_id);
+create index if not exists messages_conversation_id_idx on public.messages(conversation_id);
+create index if not exists messages_sender_id_idx on public.messages(sender_id);
+create index if not exists messages_is_read_idx on public.messages(is_read);
 
 -- ROW LEVEL SECURITY (RLS) POLICIES
 alter table public.profiles enable row level security;
@@ -141,6 +174,9 @@ alter table public.comments enable row level security;
 alter table public.follows enable row level security;
 alter table public.bookmarks enable row level security;
 alter table public.notifications enable row level security;
+alter table public.conversations enable row level security;
+alter table public.conversation_participants enable row level security;
+alter table public.messages enable row level security;
 
 -- Profiles Policies
 create policy "Allow public read access to profiles" on public.profiles for select using (true);
@@ -188,6 +224,36 @@ create policy "Allow users to delete their own bookmarks" on public.bookmarks fo
 create policy "Allow users to read their own notifications" on public.notifications for select using (auth.uid() = user_id);
 create policy "Allow users to update their own notifications" on public.notifications for update using (auth.uid() = user_id);
 create policy "Allow users to delete their own notifications" on public.notifications for delete using (auth.uid() = user_id);
+
+-- Conversations Policies
+create policy "Allow participants to read conversations" on public.conversations for select using (
+  exists (select 1 from public.conversation_participants cp where cp.conversation_id = public.conversations.id and cp.user_id = auth.uid())
+);
+create policy "Allow authenticated users to create conversations" on public.conversations for insert with check (auth.uid() = created_by);
+
+-- Conversation Participants Policies
+create policy "Allow participants to read conversation participants" on public.conversation_participants for select using (
+  exists (select 1 from public.conversation_participants cp where cp.conversation_id = public.conversation_participants.conversation_id and cp.user_id = auth.uid())
+);
+create policy "Allow participants to join conversations" on public.conversation_participants for insert with check (
+  auth.uid() = user_id OR auth.uid() = (select created_by from public.conversations where id = conversation_id)
+);
+create policy "Allow participants to delete their own conversation membership" on public.conversation_participants for delete using (
+  auth.uid() = user_id OR auth.uid() = (select created_by from public.conversations where id = conversation_id)
+);
+
+-- Messages Policies
+create policy "Allow participants to read messages" on public.messages for select using (
+  exists (select 1 from public.conversation_participants cp where cp.conversation_id = public.messages.conversation_id and cp.user_id = auth.uid())
+);
+create policy "Allow participants to send messages" on public.messages for insert with check (
+  auth.uid() = sender_id AND exists (select 1 from public.conversation_participants cp where cp.conversation_id = public.messages.conversation_id and cp.user_id = auth.uid())
+);
+create policy "Allow participants to update their own or mark messages read" on public.messages for update using (
+  exists (select 1 from public.conversation_participants cp where cp.conversation_id = public.messages.conversation_id and cp.user_id = auth.uid())
+) with check (
+  auth.uid() = sender_id OR (sender_id != auth.uid() AND is_read = true)
+);
 
 -- TRIGGER FOR AUTOMATIC PROFILE CREATION ON AUTH SIGNUP
 create or replace function public.handle_new_user()
