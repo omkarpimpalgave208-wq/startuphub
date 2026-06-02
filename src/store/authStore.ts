@@ -95,8 +95,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
 
     const createFallbackProfile = async (user: any): Promise<Profile | null> => {
-      let profile = await api.getProfile(user.id);
-      if (profile) return profile;
+      try {
+        const profile = await api.getProfile(user.id);
+        if (profile) return profile;
+      } catch (err) {
+        console.warn('[auth] Failed to fetch existing profile during initialization:', err);
+      }
 
       console.warn('[auth] Missing profile detected for authenticated user, attempting to create one.', {
         userId: user.id,
@@ -104,7 +108,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
 
       try {
-        profile = await api.createProfileFromAuthUser(user);
+        const profile = await api.createProfileFromAuthUser(user);
         console.info('[auth] Created missing profile for user:', user.id);
         return profile;
       } catch (profileCreationError) {
@@ -161,8 +165,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const profile = await createFallbackProfile(session.user);
       set({ user: session.user, profile });
     } catch (err) {
-      console.error('Auth initialization error:', err);
-      await clearStaleSession('auth initialization exception');
+      console.error('[auth] Auth initialization error:', err);
+      // Avoid clearStaleSession on generic/temporary runtime errors to prevent force-logging out valid sessions
     } finally {
       set({ loading: false });
     }

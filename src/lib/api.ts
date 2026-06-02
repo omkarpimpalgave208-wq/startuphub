@@ -561,15 +561,26 @@ export const api = {
   },
 
   async checkFollow(followerId: string, followedId: string): Promise<boolean> {
-    const { data, error } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('follower_id', followerId)
-      .eq('followed_id', followedId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_id', followerId)
+        .eq('followed_id', followedId)
+        .single();
 
-    if (error && error.code !== 'PGRST116') throw error;
-    return !!data;
+      if (error && error.code !== 'PGRST116') {
+        if (error.code === 'PGRST205' || error.message.includes('Could not find')) {
+          console.warn('[api.checkFollow] Table follows missing in database');
+          return false;
+        }
+        throw error;
+      }
+      return !!data;
+    } catch (err) {
+      console.warn('[api.checkFollow] Exception checking follow status:', err);
+      return false;
+    }
   },
 
   async addFollow(followerId: string, followedId: string): Promise<void> {
@@ -602,78 +613,119 @@ export const api = {
   },
 
   async getConnectionCount(userId: string): Promise<number> {
-    const { data, error } = await supabase
-      .from('connections')
-      .select('id')
-      .or(`user_one_id.eq.${userId},user_two_id.eq.${userId}`);
+    try {
+      const { data, error } = await supabase
+        .from('connections')
+        .select('id')
+        .or(`user_one_id.eq.${userId},user_two_id.eq.${userId}`);
 
-    if (error) throw error;
-    return (data || []).length;
+      if (error) {
+        console.warn('[api.getConnectionCount] Table connections error (might not exist yet):', error.message);
+        return 0;
+      }
+      return (data || []).length;
+    } catch (err) {
+      console.warn('[api.getConnectionCount] Exception fetching connection count:', err);
+      return 0;
+    }
   },
 
   async getConnectionStatus(userId: string, profileId: string): Promise<{ state: 'none' | 'request_sent' | 'request_received' | 'connected'; requestId?: string }> {
-    const { data: connection, error: connectionError } = await supabase
-      .from('connections')
-      .select('id')
-      .or(
-        `and(user_one_id.eq.${userId},user_two_id.eq.${profileId}),and(user_one_id.eq.${profileId},user_two_id.eq.${userId})`
-      )
-      .limit(1)
-      .single();
+    try {
+      const { data: connection, error: connectionError } = await supabase
+        .from('connections')
+        .select('id')
+        .or(
+          `and(user_one_id.eq.${userId},user_two_id.eq.${profileId}),and(user_one_id.eq.${profileId},user_two_id.eq.${userId})`
+        )
+        .limit(1)
+        .single();
 
-    if (connectionError && connectionError.code !== 'PGRST116') throw connectionError;
-    if (connection) {
-      return { state: 'connected' };
-    }
-
-    const { data, error } = await supabase
-      .from('connection_requests')
-      .select('*')
-      .or(
-        `and(sender_id.eq.${userId},receiver_id.eq.${profileId}),and(sender_id.eq.${profileId},receiver_id.eq.${userId})`
-      )
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error;
-    if (!data) return { state: 'none' };
-
-    if (data.status === 'accepted') {
-      return { state: 'connected', requestId: data.id };
-    }
-
-    if (data.status === 'pending') {
-      if (data.sender_id === userId) {
-        return { state: 'request_sent', requestId: data.id };
+      if (connectionError && connectionError.code !== 'PGRST116') {
+        if (connectionError.code === 'PGRST205' || connectionError.message.includes('Could not find')) {
+          console.warn('[api.getConnectionStatus] Table connections missing in database');
+          return { state: 'none' };
+        }
+        throw connectionError;
       }
-      return { state: 'request_received', requestId: data.id };
-    }
+      if (connection) {
+        return { state: 'connected' };
+      }
 
-    return { state: 'none' };
+      const { data, error } = await supabase
+        .from('connection_requests')
+        .select('*')
+        .or(
+          `and(sender_id.eq.${userId},receiver_id.eq.${profileId}),and(sender_id.eq.${profileId},receiver_id.eq.${userId})`
+        )
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        if (error.code === 'PGRST205' || error.message.includes('Could not find')) {
+          console.warn('[api.getConnectionStatus] Table connection_requests missing in database');
+          return { state: 'none' };
+        }
+        throw error;
+      }
+      if (!data) return { state: 'none' };
+
+      if (data.status === 'accepted') {
+        return { state: 'connected', requestId: data.id };
+      }
+
+      if (data.status === 'pending') {
+        if (data.sender_id === userId) {
+          return { state: 'request_sent', requestId: data.id };
+        }
+        return { state: 'request_received', requestId: data.id };
+      }
+
+      return { state: 'none' };
+    } catch (err) {
+      console.warn('[api.getConnectionStatus] Exception checking connection status:', err);
+      return { state: 'none' };
+    }
   },
 
   async getIncomingConnectionRequests(userId: string): Promise<ConnectionRequest[]> {
-    const { data, error } = await supabase
-      .from('connection_requests')
-      .select('id, sender_id, receiver_id, status, created_at, sender:sender_id (id, username, full_name, avatar_url)')
-      .eq('receiver_id', userId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('connection_requests')
+        .select('id, sender_id, receiver_id, status, created_at, sender:sender_id (id, username, full_name, avatar_url)')
+        .eq('receiver_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return (data || []) as unknown as ConnectionRequest[];
+      if (error) {
+        console.warn('[api.getIncomingConnectionRequests] Table connection_requests error (might not exist yet):', error.message);
+        return [];
+      }
+      return (data || []) as unknown as ConnectionRequest[];
+    } catch (err) {
+      console.warn('[api.getIncomingConnectionRequests] Exception fetching connection requests:', err);
+      return [];
+    }
   },
 
   async getSentConnectionRequests(userId: string): Promise<ConnectionRequest[]> {
-    const { data, error } = await supabase
-      .from('connection_requests')
-      .select('id, sender_id, receiver_id, status, created_at, receiver:receiver_id (id, username, full_name, avatar_url)')
-      .eq('sender_id', userId)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('connection_requests')
+        .select('id, sender_id, receiver_id, status, created_at, receiver:receiver_id (id, username, full_name, avatar_url)')
+        .eq('sender_id', userId)
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return (data || []) as unknown as ConnectionRequest[];
+      if (error) {
+        console.warn('[api.getSentConnectionRequests] Table connection_requests error (might not exist yet):', error.message);
+        return [];
+      }
+      return (data || []) as unknown as ConnectionRequest[];
+    } catch (err) {
+      console.warn('[api.getSentConnectionRequests] Exception fetching sent connection requests:', err);
+      return [];
+    }
   },
 
   async sendConnectionRequest(senderId: string, receiverId: string): Promise<void> {
@@ -784,6 +836,9 @@ export const api = {
   normalizeProfileRow(data: Record<string, unknown>): Profile {
     const website = (data.website as string | null) || (data.website_url as string | null) || null;
     const website_url = (data.website_url as string | null) || (data.website as string | null) || null;
+    const banner_url = (data.banner_url as string | null) || null;
+    const banner_style = (data.banner_style as string | null) || null;
+    const location = (data.location as string | null) || null;
     const skills = Array.isArray(data.skills) ? data.skills : [];
     const achievements = Array.isArray(data.achievements) ? data.achievements : [];
     const experience = Array.isArray(data.experience) ? data.experience : [];
@@ -804,6 +859,9 @@ export const api = {
       ...row,
       website,
       website_url,
+      banner_url,
+      banner_style,
+      location,
       skills,
       achievements,
       experience,
@@ -856,26 +914,20 @@ export const api = {
     const username = await this.generateUniqueUsername(candidate || `user${userId.slice(0, 8)}`);
     const full_name = typeof metadata.full_name === 'string' ? metadata.full_name : null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // ONLY insert fields that are guaranteed to exist in the database profiles table.
+    // Omit fields like banner_url, banner_style, skills, etc., until the SQL migration is run.
     const { data, error } = await (supabase.from('profiles') as any)
       .insert({
         id: user.id,
         username,
         full_name,
         avatar_url: null,
-        banner_url: null,
-        banner_style: null,
-        location: null,
         headline: null,
         bio: null,
         website: null,
-        website_url: null,
         github_url: null,
         twitter_url: null,
-        linkedin_url: null,
-        skills: [],
-        achievements: [],
-        experience: []
+        linkedin_url: null
       })
       .select()
       .single();
@@ -913,16 +965,26 @@ export const api = {
       throw error;
     }
 
-    const { data: connectionsData, error: connectionsError } = await supabase
-      .from('connections')
-      .select('id')
-      .or(`user_one_id.eq.${userId},user_two_id.eq.${userId}`);
+    // Gracefully handle connections lookup failure in case the connections table is not yet created
+    let connectionsCount = 0;
+    try {
+      const { data: connectionsData, error: connectionsError } = await supabase
+        .from('connections')
+        .select('id')
+        .or(`user_one_id.eq.${userId},user_two_id.eq.${userId}`);
 
-    if (connectionsError) throw connectionsError;
+      if (connectionsError) {
+        console.warn('[api.getProfile] Connections query database error (table might not exist yet):', connectionsError.message);
+      } else if (connectionsData) {
+        connectionsCount = connectionsData.length;
+      }
+    } catch (err) {
+      console.warn('[api.getProfile] Exception during connections fetch:', err);
+    }
     
     return this.normalizeProfileRow({
       ...data,
-      connections: (connectionsData || []).length
+      connections: connectionsCount
     });
   },
 
@@ -944,16 +1006,26 @@ export const api = {
       throw error;
     }
 
-    const { data: connectionsData, error: connectionsError } = await supabase
-      .from('connections')
-      .select('id')
-      .or(`user_one_id.eq.${data.id},user_two_id.eq.${data.id}`);
+    // Gracefully handle connections lookup failure in case the connections table is not yet created
+    let connectionsCount = 0;
+    try {
+      const { data: connectionsData, error: connectionsError } = await supabase
+        .from('connections')
+        .select('id')
+        .or(`user_one_id.eq.${data.id},user_two_id.eq.${data.id}`);
 
-    if (connectionsError) throw connectionsError;
+      if (connectionsError) {
+        console.warn('[api.getProfileByUsername] Connections query database error (table might not exist yet):', connectionsError.message);
+      } else if (connectionsData) {
+        connectionsCount = connectionsData.length;
+      }
+    } catch (err) {
+      console.warn('[api.getProfileByUsername] Exception during connections fetch:', err);
+    }
 
     return this.normalizeProfileRow({
       ...data,
-      connections: (connectionsData || []).length
+      connections: connectionsCount
     });
   },
 
@@ -1089,60 +1161,73 @@ export const api = {
   },
 
   async getConversationsForUser(userId: string): Promise<Conversation[]> {
-    const { data, error } = await supabase
-      .from('conversation_participants')
-      .select(`
-        conversation:conversation_id (
-          id,
-          created_at,
-          participants:conversation_participants (
-            user_id,
-            profiles:user_id (*)
-          ),
-          messages:messages (
+    try {
+      const { data, error } = await supabase
+        .from('conversation_participants')
+        .select(`
+          conversation:conversation_id (
             id,
-            content,
-            sender_id,
-            is_read,
-            created_at
+            created_at,
+            participants:conversation_participants (
+              user_id,
+              profiles:user_id (*)
+            ),
+            messages:messages (
+              id,
+              content,
+              sender_id,
+              is_read,
+              created_at
+            )
           )
-        )
-      `)
-      .eq('user_id', userId);
+        `)
+        .eq('user_id', userId);
 
-    if (error) throw error;
+      if (error) {
+        if (error.code === 'PGRST205' || error.message.includes('Could not find')) {
+          console.warn('[api.getConversationsForUser] Conversation tables are not yet created in the database.');
+          return [];
+        }
+        throw error;
+      }
 
-    const conversations = (data || []).map((row) => {
-      const conversation = row.conversation as Record<string, unknown>;
-      const participantsData = Array.isArray(conversation.participants) ? conversation.participants : [];
-      const messagesData = Array.isArray(conversation.messages) ? conversation.messages : [];
+      const conversations = (data || []).map((row) => {
+        const conversation = row.conversation as Record<string, unknown>;
+        if (!conversation) return null;
+        
+        const participantsData = Array.isArray(conversation.participants) ? conversation.participants : [];
+        const messagesData = Array.isArray(conversation.messages) ? conversation.messages : [];
 
-      const participants = participantsData
-        .map((participant: any) => participant.profiles)
-        .filter(Boolean) as Profile[];
+        const participants = participantsData
+          .map((participant: any) => participant.profiles)
+          .filter(Boolean) as Profile[];
 
-      const partner = participants.find((participant) => participant.id !== userId) || participants[0];
-      const sortedMessages = [...messagesData].sort(
-        (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-      const lastMessage = sortedMessages[sortedMessages.length - 1];
+        const partner = participants.find((participant) => participant.id !== userId) || participants[0];
+        const sortedMessages = [...messagesData].sort(
+          (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        const lastMessage = sortedMessages[sortedMessages.length - 1];
 
-      return {
-        id: conversation.id as string,
-        created_at: conversation.created_at as string,
-        participants,
-        partner,
-        last_message: lastMessage ? (lastMessage.content as string) : undefined,
-        last_message_at: lastMessage ? (lastMessage.created_at as string) : undefined,
-        unread_count: sortedMessages.filter((message: any) => !message.is_read && message.sender_id !== userId).length
-      } as Conversation;
-    });
+        return {
+          id: conversation.id as string,
+          created_at: conversation.created_at as string,
+          participants,
+          partner,
+          last_message: lastMessage ? (lastMessage.content as string) : undefined,
+          last_message_at: lastMessage ? (lastMessage.created_at as string) : undefined,
+          unread_count: sortedMessages.filter((message: any) => !message.is_read && message.sender_id !== userId).length
+        } as Conversation;
+      }).filter(Boolean) as Conversation[];
 
-    return conversations.sort((a, b) => {
-      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : new Date(a.created_at).getTime();
-      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : new Date(b.created_at).getTime();
-      return bTime - aTime;
-    });
+      return conversations.sort((a, b) => {
+        const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : new Date(a.created_at).getTime();
+        const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : new Date(b.created_at).getTime();
+        return bTime - aTime;
+      });
+    } catch (err) {
+      console.warn('[api.getConversationsForUser] Exception fetching conversations:', err);
+      return [];
+    }
   },
 
   async getConversation(conversationId: string, userId: string): Promise<Conversation | null> {
@@ -1353,24 +1438,33 @@ export const api = {
     callback: (payload: any) => void,
     filter?: string
   ): () => void {
-    const subscription = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event,
-          schema: 'public',
-          table: tableName,
-          filter
-        },
-        (payload) => {
-          callback(payload);
-        }
-      )
-      .subscribe();
+    try {
+      const subscription = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event,
+            schema: 'public',
+            table: tableName,
+            filter
+          },
+          (payload) => {
+            callback(payload);
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(subscription);
-    };
+      return () => {
+        try {
+          supabase.removeChannel(subscription);
+        } catch (removeErr) {
+          console.warn('[api.subscribeToChanges] Failed to remove channel:', removeErr);
+        }
+      };
+    } catch (err) {
+      console.warn('[api.subscribeToChanges] Realtime subscription failed to initialize:', err);
+      return () => {};
+    }
   }
 };
