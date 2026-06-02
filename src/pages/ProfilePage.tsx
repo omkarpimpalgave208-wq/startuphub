@@ -215,9 +215,13 @@ export function ProfilePage() {
       } else {
         await api.addFollow(user.id, profile.id);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Follow error:', err);
-      setActionMessage('Unable to update follow status. Please try again.');
+      if (err.code === 'PGRST205' || err.message?.includes('Could not find') || err.message?.includes('relation') || err.message?.includes('does not exist')) {
+        setActionMessage('Database table "follows" is missing. Please execute the "profiles_and_connections_migration.sql" script in your Supabase SQL Editor to enable follows!');
+      } else {
+        setActionMessage('Unable to update follow status. Please try again.');
+      }
       setIsFollowing(previousFollowingState);
       setProfile(prev =>
         prev
@@ -251,9 +255,13 @@ export function ProfilePage() {
       setConnectionState('request_sent');
       setConnectionRequestId(null);
       setActionMessage('Connection request sent.');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Connection request error:', err);
-      setActionMessage((err as Error).message || 'Unable to send connection request.');
+      if (err.code === 'PGRST205' || err.message?.includes('Could not find') || err.message?.includes('relation') || err.message?.includes('does not exist')) {
+        setActionMessage('Database table "connection_requests" is missing. Please execute the "profiles_and_connections_migration.sql" script in your Supabase SQL Editor to enable connections!');
+      } else {
+        setActionMessage(err.message || 'Unable to send connection request.');
+      }
     } finally {
       setConnectLoading(false);
     }
@@ -271,9 +279,13 @@ export function ProfilePage() {
     try {
       const conversation = await api.openConversation(user.id, profile.id);
       navigate(`/messages/${conversation.id}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Open conversation error:', err);
-      setActionMessage((err as Error).message || 'Unable to open a conversation.');
+      if (err.code === 'PGRST205' || err.message?.includes('Could not find') || err.message?.includes('relation') || err.message?.includes('does not exist')) {
+        setActionMessage('Database chat tables are missing. Please execute the "profiles_and_connections_migration.sql" script in your Supabase SQL Editor to enable direct messaging!');
+      } else {
+        setActionMessage(err.message || 'Unable to open a conversation.');
+      }
     } finally {
       setMessageLoading(false);
     }
@@ -565,7 +577,8 @@ export function ProfilePage() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="flex flex-col gap-4">
+                  {/* Name and Username Section */}
                   <div>
                     <div className="flex flex-wrap items-center gap-3">
                       <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
@@ -578,7 +591,13 @@ export function ProfilePage() {
                     <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">@{profile.username}</p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
+                  {/* Headline (Visible on Desktop & Mobile stacked cleanly) */}
+                  {profile.headline && (
+                    <p className="text-lg text-zinc-700 dark:text-zinc-300 leading-relaxed max-w-3xl">{profile.headline}</p>
+                  )}
+
+                  {/* Buttons Section - stacked cleanly under the headline/username and always 100% visible on all screen sizes */}
+                  <div className="flex flex-wrap items-center gap-3 mt-1">
                     {!isOwnProfile && user ? (
                         <>
                           <Button
@@ -631,10 +650,6 @@ export function ProfilePage() {
                   <div className="mt-4 rounded-3xl border border-orange-300/40 bg-orange-50/80 px-4 py-3 text-sm text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
                     {actionMessage}
                   </div>
-                )}
-
-                {profile.headline && (
-                  <p className="mt-4 text-lg text-zinc-700 dark:text-zinc-300 leading-8">{profile.headline}</p>
                 )}
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
