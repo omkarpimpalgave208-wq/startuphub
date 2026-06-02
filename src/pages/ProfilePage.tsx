@@ -580,55 +580,44 @@ export function ProfilePage() {
 
                   <div className="flex flex-wrap items-center gap-3">
                     {!isOwnProfile && user ? (
-                      <>
-                        <Button
-                          variant={isFollowing ? 'outline' : 'primary'}
-                          size="sm"
-                          loading={followLoading}
-                          onClick={handleFollow}
-                        >
-                          {isFollowing ? 'Following' : 'Follow'}
-                        </Button>
+                        <>
+                          <Button
+                            variant={isFollowing ? 'outline' : 'primary'}
+                            size="sm"
+                            loading={followLoading}
+                            onClick={handleFollow}
+                          >
+                            {isFollowing ? 'Following' : 'Follow'}
+                          </Button>
 
-                        {connectionState === 'request_received' ? (
-                          <div className="flex flex-wrap gap-2">
-                            <Button size="sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
-                              Accept
-                            </Button>
-                            <Button size="sm" variant="outline" loading={connectLoading} onClick={handleRejectConnectionRequest}>
-                              Reject
-                            </Button>
-                          </div>
-                        ) : connectionState === 'connected' ? (
-                          <>
+                          {connectionState === 'request_received' ? (
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
+                                Accept
+                              </Button>
+                              <Button size="sm" variant="outline" loading={connectLoading} onClick={handleRejectConnectionRequest}>
+                                Reject
+                              </Button>
+                            </div>
+                          ) : connectionState === 'connected' ? (
                             <Button size="sm" variant="outline" disabled>
                               Connected
                             </Button>
-                            <Button size="sm" variant="secondary" loading={messageLoading} onClick={handleOpenConversation}>
-                              Message
-                            </Button>
-                          </>
-                        ) : connectionState === 'request_sent' ? (
-                          <>
+                          ) : connectionState === 'request_sent' ? (
                             <Button size="sm" variant="outline" disabled>
                               Request Sent
                             </Button>
-                            <Button size="sm" variant="outline" disabled>
-                              Message
-                            </Button>
-                          </>
-                        ) : (
-                          <>
+                          ) : (
                             <Button size="sm" variant="secondary" loading={connectLoading} onClick={handleConnect}>
                               Connect
                             </Button>
-                            <Button size="sm" variant="outline" disabled>
-                              Message
-                            </Button>
-                          </>
-                        )}
-                      </>
-                    ) : isOwnProfile ? (
+                          )}
+
+                          <Button size="sm" variant="secondary" loading={messageLoading} onClick={handleOpenConversation} className="ml-2">
+                            Message
+                          </Button>
+                        </>
+                      ) : isOwnProfile ? (
                       <Link to="/settings">
                         <Button variant="outline" size="sm">
                           Edit Profile

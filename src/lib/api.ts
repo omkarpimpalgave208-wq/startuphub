@@ -1195,10 +1195,8 @@ export const api = {
       throw new Error('You cannot open a conversation with yourself.');
     }
 
-    const connectionStatus = await this.getConnectionStatus(userId, otherUserId);
-    if (connectionStatus.state !== 'connected') {
-      throw new Error('You must connect with this user before messaging them.');
-    }
+    // Allow conversations to be created between any two authenticated users.
+    // Previously this enforced connection status; that restriction has been removed.
 
     const { data: participantRows, error: participantError } = await supabase
       .from('conversation_participants')
