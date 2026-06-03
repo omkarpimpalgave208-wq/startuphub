@@ -63,42 +63,26 @@ export function MessagesPage() {
     };
   }, []);
 
-  // A. Global Message Subscription (Real-time Message Updates + Instant Inbox Rearrangement)
+  const appendMessageToState = (newMsg: any) => {
+    if (!newMsg) return;
+    setMessages((currentMessages) => {
+      if (currentMessages.some((msg) => msg.id === newMsg.id)) {
+        return currentMessages;
+      }
+      return [...currentMessages, newMsg as Message];
+    });
+  };
+
+  // A. Global Message Subscription (For Sidebar Updates)
   useEffect(() => {
     if (!user) return;
 
     const globalMessagesUnsubscribe = api.subscribeToChanges(
       `global-messages-user-${user.id}`,
       'messages',
-      '*', // Subscribe to all changes (INSERT, UPDATE, etc.)
-      async (payload) => {
-        const newMessage = payload.new as Message;
-        if (!newMessage) return;
-
-        const activeConversation = selectedConversationRef.current;
-
-        if (payload.eventType === 'INSERT') {
-          // If the new message is in the currently selected conversation, append it instantly
-          if (activeConversation && newMessage.conversation_id === activeConversation.id) {
-            setMessages((currentMessages) => {
-              if (currentMessages.some((msg) => msg.id === newMessage.id)) {
-                return currentMessages;
-              }
-              return [...currentMessages, newMessage];
-            });
-            
-            if (newMessage.sender_id !== user.id) {
-              try {
-                await api.markConversationMessagesRead(activeConversation.id, user.id);
-              } catch (err) {
-                console.error('Error marking message read in subscription:', err);
-              }
-            }
-          }
-        }
-
+      '*',
+      async () => {
         // Always reload/update the conversations list silently to ensure accurate counts and status
-        // Awaiting makes sure any concurrent database mark as read operations finish first
         await fetchConversations(true);
       }
     );
@@ -107,6 +91,43 @@ export function MessagesPage() {
       globalMessagesUnsubscribe();
     };
   }, [user]);
+
+  // A.2 Conversation-Specific Message Subscription (Supabase Realtime)
+  useEffect(() => {
+    if (!user || !conversationId) return;
+
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`
+        },
+        (payload) => {
+          console.log('Realtime message received', payload);
+          appendMessageToState(payload.new);
+
+          // Silently update unread badge status / sidebar list
+          if (payload.new && payload.new.sender_id !== user.id) {
+            api.markConversationMessagesRead(conversationId, user.id)
+              .then(() => fetchConversations(true))
+              .catch((err) => console.error('Error marking message read:', err));
+          } else {
+            fetchConversations(true);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, conversationId]);
 
   // B. Real-time Typing Indicator Broadcast Channel Subscription
   useEffect(() => {
