@@ -50,10 +50,10 @@ export function BookmarksPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full max-w-none min-w-0 md:max-w-6xl md:mx-auto px-4 md:px-0">
       <Link
         to="/"
-        className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 mb-6"
+        className="hidden md:inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to feed

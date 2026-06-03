@@ -68,7 +68,7 @@ export function NewDiscussionPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full max-w-none min-w-0 md:max-w-3xl md:mx-auto px-4 md:px-0">
       <Link
         to="/discussions"
         className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 mb-6"

@@ -26,7 +26,7 @@ export function TrendingPage() {
   };
 
   return (
-    <div className="w-full max-w-full">
+    <div className="w-full max-w-none min-w-0 px-4 md:px-0">
       <div className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
           <TrendingUp className="w-7 h-7 sm:w-8 sm:h-8 text-orange-500" />

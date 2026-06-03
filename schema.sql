@@ -108,6 +108,7 @@ create table if not exists public.bookmarks (
 create table if not exists public.conversations (
   id uuid default gen_random_uuid() primary key,
   created_by uuid references public.profiles(id) on delete cascade not null,
+  conversation_type text not null default 'private' check (conversation_type in ('private', 'group')),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

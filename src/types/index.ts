@@ -122,6 +122,7 @@ export interface Message {
 export interface Conversation {
   id: string;
   created_at: string;
+  conversation_type?: 'private' | 'group';
   participants: Profile[];
   partner?: Profile;
   last_message?: string;

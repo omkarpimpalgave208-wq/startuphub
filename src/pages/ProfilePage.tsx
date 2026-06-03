@@ -15,22 +15,22 @@ import {
   XCircle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { Profile, Product, Bookmark as SavedBookmark, ConnectionRequest } from '../types';
+import type { Profile, Product, Bookmark as SavedBookmark, ConnectionRequest, Discussion } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import { ProductCard } from '../components/ProductCard';
 import { api } from '../lib/api';
+import { isUserOnline, formatLastSeen } from '../utils/presence';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
 
 const tabItems = [
+  { id: 'about', label: 'Overview & Skills' },
   { id: 'products', label: 'My Startups' },
-  { id: 'discussions', label: 'Discussions' },
-  { id: 'activity', label: 'Activity' },
-  { id: 'saved', label: 'Saved' },
-  { id: 'about', label: 'About' }
+  { id: 'activity', label: 'Activity Timeline' },
+  { id: 'saved', label: 'Saved Startups' }
 ] as const;
 
 const bannerStyles: Record<string, string> = {
@@ -60,7 +60,8 @@ export function ProfilePage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState('');
   const [coverStyle, setCoverStyle] = useState('gradient-1');
-  const [activeTab, setActiveTab] = useState<TabId>('products');
+  const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  const [activeTab, setActiveTab] = useState<TabId>('about');
 
   useEffect(() => {
     fetchProfile();
@@ -148,12 +149,14 @@ export function ProfilePage() {
       const connectionPromise = api.getConnectionCount(profileData.id);
       const followPromise = user ? api.checkFollow(user.id, profileData.id) : Promise.resolve(false);
       const statusPromise = user ? api.getConnectionStatus(user.id, profileData.id) : Promise.resolve({ state: 'none' as const });
+      const discussionsPromise = api.getDiscussions({ userId: profileData.id });
 
-      const [productsData, connectionsCount, followState, connectionStatus] = await Promise.all([
+      const [productsData, connectionsCount, followState, connectionStatus, discussionsData] = await Promise.all([
         productPromise,
         connectionPromise,
         followPromise,
-        statusPromise
+        statusPromise,
+        discussionsPromise
       ]);
 
       setProfile({ ...profileData, connections: connectionsCount });
@@ -161,6 +164,7 @@ export function ProfilePage() {
       setIsFollowing(followState);
       setConnectionState(connectionStatus.state);
       setConnectionRequestId(connectionStatus.requestId ?? null);
+      setDiscussions(discussionsData);
 
       if (user?.id === profileData.id) {
         await fetchIncomingRequests(user.id);
@@ -217,10 +221,10 @@ export function ProfilePage() {
       }
     } catch (err: any) {
       console.error('Follow error:', err);
-      if (err.code === 'PGRST205' || err.message?.includes('Could not find') || err.message?.includes('relation') || err.message?.includes('does not exist')) {
-        setActionMessage('Database table "follows" is missing. Please execute the "profiles_and_connections_migration.sql" script in your Supabase SQL Editor to enable follows!');
+      if (err.code === 'PGRST205' || err.code === '42P01' || err.message?.includes('does not exist')) {
+        setActionMessage('Database table "follows" is missing. Please execute follows migration.');
       } else {
-        setActionMessage('Unable to update follow status. Please try again.');
+        setActionMessage(err.message || 'Unable to update follow status. Please try again.');
       }
       setIsFollowing(previousFollowingState);
       setProfile(prev =>
@@ -257,8 +261,8 @@ export function ProfilePage() {
       setActionMessage('Connection request sent.');
     } catch (err: any) {
       console.error('Connection request error:', err);
-      if (err.code === 'PGRST205' || err.message?.includes('Could not find') || err.message?.includes('relation') || err.message?.includes('does not exist')) {
-        setActionMessage('Database table "connection_requests" is missing. Please execute the "profiles_and_connections_migration.sql" script in your Supabase SQL Editor to enable connections!');
+      if (err.code === 'PGRST205' || err.code === '42P01' || err.message?.includes('does not exist')) {
+        setActionMessage('Database table "connection_requests" is missing.');
       } else {
         setActionMessage(err.message || 'Unable to send connection request.');
       }
@@ -281,8 +285,8 @@ export function ProfilePage() {
       navigate(`/messages/${conversation.id}`);
     } catch (err: any) {
       console.error('Open conversation error:', err);
-      if (err.code === 'PGRST205' || err.message?.includes('Could not find') || err.message?.includes('relation') || err.message?.includes('does not exist')) {
-        setActionMessage('Database chat tables are missing. Please execute the "profiles_and_connections_migration.sql" script in your Supabase SQL Editor to enable direct messaging!');
+      if (err.code === 'PGRST205' || err.code === '42P01' || err.message?.includes('does not exist')) {
+        setActionMessage('Database chat tables are missing.');
       } else {
         setActionMessage(err.message || 'Unable to open a conversation.');
       }
@@ -382,8 +386,8 @@ export function ProfilePage() {
             {products.length > 0 ? (
               products.map((product) => <ProductCard key={product.id} product={product} />)
             ) : (
-              <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-10 text-center">
-                <p className="text-zinc-500">
+              <div className="rounded-xl md:rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 p-6 md:p-10 text-center shadow-none">
+                <p className="text-sm text-zinc-500">
                   {isOwnProfile
                     ? "You haven't launched any products yet. Create one from the launch page to showcase it here."
                     : 'This founder has not launched products yet.'}
@@ -395,8 +399,8 @@ export function ProfilePage() {
       case 'saved':
         if (!isOwnProfile) {
           return (
-            <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-10 text-center">
-              <p className="text-zinc-500">Saved content is private.</p>
+            <div className="rounded-xl md:rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 p-6 md:p-10 text-center shadow-none">
+              <p className="text-sm text-zinc-500">Saved content is private.</p>
             </div>
           );
         }
@@ -404,7 +408,7 @@ export function ProfilePage() {
         return (
           <div className="space-y-4">
             {savedLoading ? (
-              <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-10 text-center">
+              <div className="rounded-xl md:rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 p-6 md:p-10 text-center shadow-none">
                 <Loader2 className="w-6 h-6 mx-auto text-zinc-400 animate-spin" />
               </div>
             ) : bookmarks.length > 0 ? (
@@ -412,42 +416,39 @@ export function ProfilePage() {
                 bookmark.products ? <ProductCard key={bookmark.id} product={bookmark.products} /> : null
               )
             ) : (
-              <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-10 text-center">
-                <p className="text-zinc-500">No saved startups yet. Save products from the feed to build your collection.</p>
+              <div className="rounded-xl md:rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 p-6 md:p-10 text-center shadow-none">
+                <p className="text-sm text-zinc-500">No saved startups yet. Save products from the feed to build your collection.</p>
               </div>
             )}
           </div>
         );
       case 'about':
         return (
-          <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-            <div className="space-y-6">
-              <section className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-sm">
-                <div className="flex items-center gap-3 text-zinc-900 dark:text-white mb-4">
-                  <Briefcase className="w-5 h-5 text-orange-500" />
-                  <h3 className="text-lg font-semibold">Professional Summary</h3>
+          <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr] w-full">
+            <div className="space-y-6 w-full">
+              {/* Professional Bio */}
+              <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
+                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
+                  <Briefcase className="w-4.5 h-4.5 text-orange-500 flex-shrink-0" />
+                  <h3 className="text-sm font-bold">About the Founder</h3>
                 </div>
-                {profile.headline ? (
-                  <p className="text-zinc-600 dark:text-zinc-400 mb-4">{profile.headline}</p>
-                ) : (
-                  <p className="text-zinc-500">Add your headline in settings to highlight your founder role.</p>
+                {profile.headline && (
+                  <p className="text-xs font-bold text-zinc-700 dark:text-zinc-350 mb-3 border-l-2 border-orange-500 pl-3 leading-relaxed italic">{profile.headline}</p>
                 )}
-                <div className="space-y-3">
-                  <p className="text-sm uppercase tracking-[0.24em] text-zinc-400">About</p>
-                  {profile.bio ? (
-                    <p className="text-zinc-600 dark:text-zinc-400 leading-7">{profile.bio}</p>
-                  ) : (
-                    <p className="text-zinc-500">Use your bio to share your mission, strengths, and what you are building.</p>
-                  )}
-                </div>
+                {profile.bio ? (
+                  <p className="text-xs md:text-sm text-zinc-650 dark:text-zinc-350 leading-relaxed whitespace-pre-wrap">{profile.bio}</p>
+                ) : (
+                  <p className="text-xs text-zinc-500">No biography details added yet. Add details in Settings to highlight your founder journey.</p>
+                )}
               </section>
 
-              <section className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-sm">
-                <div className="flex items-center gap-3 text-zinc-900 dark:text-white mb-4">
-                  <Layers className="w-5 h-5 text-sky-500" />
-                  <h3 className="text-lg font-semibold">Contact & Links</h3>
+              {/* Contact Links */}
+              <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
+                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
+                  <Globe className="w-4.5 h-4.5 text-sky-500 flex-shrink-0" />
+                  <h3 className="text-sm font-bold">Founder Contact & Socials</h3>
                 </div>
-                <div className="grid gap-3">
+                <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2">
                   {profileLinks.length > 0 ? (
                     profileLinks.map((item) => {
                       const Icon = item.icon;
@@ -457,64 +458,156 @@ export function ProfilePage() {
                           href={item.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3 text-zinc-700 dark:text-zinc-200 hover:border-orange-400 hover:text-orange-600 transition-colors"
+                          className="flex items-center gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 px-3.5 py-2.5 text-xs text-zinc-700 dark:text-zinc-200 hover:border-orange-500/50 hover:text-orange-500 transition-all hover:bg-white dark:hover:bg-zinc-900 shadow-sm"
                         >
-                          <Icon className="w-5 h-5" />
-                          {item.label}
+                          <Icon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                          <span className="font-semibold">{item.label}</span>
                         </a>
                       );
                     })
                   ) : (
-                    <p className="text-zinc-500">No social links yet. Add links in settings to make it easier for people to connect.</p>
+                    <p className="text-xs text-zinc-500 col-span-full">No social links added yet. Add links in settings to help builders reach you.</p>
                   )}
                 </div>
               </section>
             </div>
 
-            <aside className="space-y-6">
-              <section className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-sm">
-                <p className="text-sm uppercase tracking-[0.24em] text-zinc-400 mb-4">Key metrics</p>
-                <div className="space-y-3">
-                  {summaryItems.map((item) => (
-                    <div key={item.label} className="flex items-center justify-between gap-4">
-                      <p className="text-zinc-500">{item.label}</p>
-                      <p className="text-lg font-semibold text-zinc-900 dark:text-white">{item.value}</p>
-                    </div>
-                  ))}
+            <div className="space-y-6 w-full">
+              {/* Skills Card */}
+              <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
+                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
+                  <Sparkles className="w-4.5 h-4.5 text-emerald-500 flex-shrink-0" />
+                  <h3 className="text-sm font-bold">Founder Skills & Expertise</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {profile.skills && profile.skills.length > 0 ? (
+                    profile.skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-350 hover:border-orange-500/30 hover:text-orange-500 transition-colors"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    ['Product Design', 'Venture Strategy', 'React & TypeScript', 'Growth Marketing', 'Founder Operations', 'User Experience'].map((skill) => (
+                      <span
+                        key={skill}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-200/60 dark:border-zinc-850 bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  )}
                 </div>
               </section>
-              <section className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-sm">
-                <div className="flex items-center gap-3 text-zinc-900 dark:text-white mb-4">
-                  <Sparkles className="w-5 h-5 text-emerald-500" />
-                  <h3 className="text-lg font-semibold">Founder Focus</h3>
+
+              {/* Achievements Focus Card */}
+              <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
+                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-3">
+                  <Layers className="w-4.5 h-4.5 text-violet-500 flex-shrink-0" />
+                  <h3 className="text-sm font-bold">Focus & Achievements</h3>
                 </div>
-                <p className="text-zinc-500">Share your core strengths and what you care about in your headline and bio.</p>
+                {profile.achievements && profile.achievements.length > 0 ? (
+                  <ul className="space-y-2 text-xs text-zinc-650 dark:text-zinc-350 list-disc list-inside">
+                    {profile.achievements.map((ach) => (
+                      <li key={ach}>{ach}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-zinc-500 leading-relaxed">Dedicated startup founder launching and scaling digital ventures, focused on resolving actual market pain points and building sustainable products.</p>
+                )}
               </section>
-            </aside>
+            </div>
           </div>
         );
       case 'activity':
+        const timelineEvents = [
+          ...products.map(p => ({
+            id: p.id,
+            type: 'product' as const,
+            title: `Launched startup: ${p.name}`,
+            subtitle: p.tagline,
+            category: p.category,
+            upvotes: p.upvote_count || 0,
+            date: p.created_at,
+            link: `/product/${p.id}`
+          })),
+          ...discussions.map(d => ({
+            id: d.id,
+            type: 'discussion' as const,
+            title: `Started discussion: ${d.title}`,
+            subtitle: d.content,
+            category: d.category,
+            upvotes: d.upvote_count || 0,
+            date: d.created_at,
+            link: `/discussion/${d.id}`
+          }))
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
         return (
-          <div className="space-y-4">
-            <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-8 text-center">
-              <p className="text-zinc-500">Activity is built around launches, follows, and engagement. Keep sharing products and discussions to make this feed richer.</p>
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-4.5 h-4.5 text-orange-500" />
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Founder Milestone Timeline</h3>
+              </div>
+              <p className="text-xs text-zinc-500">Chronological history of startup launches and discussion contributions on StartupHub.</p>
             </div>
-            {products.length > 0 && (
-              <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-white mb-4">Recent Launch Activity</h3>
-                <div className="space-y-4">
-                  {products.slice(0, 3).map((product) => (
-                    <ProductCard key={product.id} product={product} />
-                  ))}
-                </div>
+
+            {timelineEvents.length > 0 ? (
+              <div className="relative border-l border-zinc-200 dark:border-zinc-800 ml-4.5 pl-6 space-y-6 pt-2">
+                {timelineEvents.map((event) => {
+                  const isProduct = event.type === 'product';
+                  return (
+                    <div key={event.id} className="relative">
+                      {/* Timeline dot */}
+                      <div className={`absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 border-white dark:border-zinc-950 flex items-center justify-center ${
+                        isProduct ? 'bg-orange-500' : 'bg-sky-500'
+                      }`}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      </div>
+
+                      {/* Event card */}
+                      <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:border-orange-500/20 transition-all shadow-sm">
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                              {new Date(event.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </span>
+                            <h4 className="text-xs font-bold text-zinc-900 dark:text-white mt-1 hover:text-orange-500 transition-colors">
+                              <Link to={event.link}>{event.title}</Link>
+                            </h4>
+                            <p className="text-xs text-zinc-500 mt-1 line-clamp-2 leading-relaxed">{event.subtitle}</p>
+                            <div className="flex gap-2 items-center mt-3">
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+                                {event.category}
+                              </span>
+                              <span className="text-[10px] text-zinc-400">&bull;</span>
+                              <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                                {event.upvotes} upvotes
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <Link
+                            to={event.link}
+                            className="text-xs font-bold text-orange-500 hover:text-orange-600 flex-shrink-0 border border-orange-500/10 hover:border-orange-500/30 rounded-lg px-2.5 py-1"
+                          >
+                            View
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 p-8 text-center">
+                <Sparkles className="w-5.5 h-5.5 text-zinc-400 mx-auto mb-2" />
+                <p className="text-xs text-zinc-500">No activity milestones recorded yet. Start a discussion or launch a startup to begin your timeline!</p>
               </div>
             )}
-          </div>
-        );
-      case 'discussions':
-        return (
-          <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-10 text-center">
-            <p className="text-zinc-500">Discussion activity will appear here once the user starts posting comments or threads.</p>
           </div>
         );
       default:
@@ -523,21 +616,21 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0 md:py-6">
+      
+      {/* Back feed Link */}
       <Link
         to="/"
-        className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 mb-6"
+        className="hidden md:inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to feed
       </Link>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl"
-      >
-        <div className="relative h-72 sm:h-80 lg:h-96">
+      <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-hidden pb-8">
+        
+        {/* Cover Banner */}
+        <div className="relative h-[180px] md:h-80 lg:h-96 w-full overflow-hidden rounded-none md:rounded-t-[2rem]">
           {coverUrl ? (
             <img
               src={coverUrl}
@@ -548,213 +641,260 @@ export function ProfilePage() {
           ) : (
             <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
           )}
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.05),rgba(15,23,42,0.45))]" />
-          <div className="absolute right-5 top-5 flex items-center gap-3">
+          <div className="absolute inset-0 bg-black/20" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.3))]" />
+          <div className="absolute right-3 top-3 md:right-5 md:top-5 flex items-center gap-2">
             {isOwnProfile && (
-              <Link to="/settings" className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-white/20">
-                Change Cover Photo
+              <Link to="/settings" className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-md backdrop-blur transition hover:bg-white/20">
+                Change Cover
               </Link>
             )}
           </div>
         </div>
 
-        <div className="-mt-20 px-4 pb-8 sm:px-6 lg:px-8">
-          <div className="rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 sm:p-8 shadow-2xl">
-            <div className="flex flex-col lg:flex-row gap-6">
-              <div className="relative flex-shrink-0">
-                <div className="overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-2xl">
-                  <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} size="xl" />
-                </div>
-                {isOwnProfile && (
-                  <Link
-                    to="/settings"
-                    className="absolute -bottom-1 right-0 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 shadow-sm transition hover:border-orange-300 hover:text-orange-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200"
-                  >
-                    Edit
-                  </Link>
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-col gap-4">
-                  {/* Name and Username Section */}
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
-                        {profile.full_name || profile.username}
-                      </h1>
-                      <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                        Founder
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">@{profile.username}</p>
-                  </div>
-
-                  {/* Headline (Visible on Desktop & Mobile stacked cleanly) */}
-                  {profile.headline && (
-                    <p className="text-lg text-zinc-700 dark:text-zinc-300 leading-relaxed max-w-3xl">{profile.headline}</p>
-                  )}
-
-                  {/* Buttons Section - stacked cleanly under the headline/username and always 100% visible on all screen sizes */}
-                  <div className="flex flex-wrap items-center gap-3 mt-1">
-                    {!isOwnProfile && user ? (
-                        <>
-                          <Button
-                            variant={isFollowing ? 'outline' : 'primary'}
-                            size="sm"
-                            loading={followLoading}
-                            onClick={handleFollow}
-                          >
-                            {isFollowing ? 'Following' : 'Follow'}
-                          </Button>
-
-                          {connectionState === 'request_received' ? (
-                            <div className="flex flex-wrap gap-2">
-                              <Button size="sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
-                                Accept
-                              </Button>
-                              <Button size="sm" variant="outline" loading={connectLoading} onClick={handleRejectConnectionRequest}>
-                                Reject
-                              </Button>
-                            </div>
-                          ) : connectionState === 'connected' ? (
-                            <Button size="sm" variant="outline" disabled>
-                              Connected
-                            </Button>
-                          ) : connectionState === 'request_sent' ? (
-                            <Button size="sm" variant="outline" disabled>
-                              Request Sent
-                            </Button>
-                          ) : (
-                            <Button size="sm" variant="secondary" loading={connectLoading} onClick={handleConnect}>
-                              Connect
-                            </Button>
-                          )}
-
-                          <Button size="sm" variant="secondary" loading={messageLoading} onClick={handleOpenConversation} className="ml-2">
-                            Message
-                          </Button>
-                        </>
-                      ) : isOwnProfile ? (
-                      <Link to="/settings">
-                        <Button variant="outline" size="sm">
-                          Edit Profile
-                        </Button>
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-
-                {actionMessage && (
-                  <div className="mt-4 rounded-3xl border border-orange-300/40 bg-orange-50/80 px-4 py-3 text-sm text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
-                    {actionMessage}
-                  </div>
-                )}
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {summaryItems.map((item) => (
-                    <div key={item.label} className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3">
-                      <p className="text-sm text-zinc-500">{item.label}</p>
-                      <p className="mt-1 text-xl font-semibold text-zinc-900 dark:text-white">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {profileLinks.length > 0 && (
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    {profileLinks.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <a
-                          key={item.label}
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-700 hover:border-orange-300 hover:bg-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 transition"
-                        >
-                          <Icon className="w-4 h-4" />
-                          {item.label}
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {profile.bio && (
-                  <div className="mt-6 rounded-3xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 p-5">
-                    <p className="text-sm uppercase tracking-[0.22em] text-zinc-400">About</p>
-                    <p className="mt-3 text-zinc-600 dark:text-zinc-300 leading-7">{profile.bio}</p>
-                  </div>
-                )}
+        {/* Profile Content Area */}
+        <div className="px-2 md:px-8 mt-4">
+          
+          {/* Avatar & Edit Button Row */}
+          <div className="flex justify-between items-end -mt-16 md:-mt-24 mb-4 relative z-10">
+            <div className="relative">
+              <div className="w-24 h-24 md:w-32 md:h-32 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-md flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
+                <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
               </div>
             </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {isOwnProfile && incomingRequests.length > 0 && (
-        <div className="mt-8 rounded-[2rem] border border-orange-200/70 bg-orange-50/60 dark:border-orange-950/50 dark:bg-orange-950/10 shadow-2xl">
-          <div className="px-5 py-5 sm:px-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-500">Connection requests</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-300 mt-1">Respond to founders who want to connect with you.</p>
+            {isOwnProfile ? (
+              <Link to="/settings">
+                <Button variant="outline" size="sm" className="text-xs md:text-sm py-1.5 px-4 h-9">
+                  Edit Profile
+                </Button>
+              </Link>
+            ) : user ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={isFollowing ? 'outline' : 'primary'}
+                  size="sm"
+                  className="text-xs md:text-sm py-1.5 px-4 h-9"
+                  loading={followLoading}
+                  onClick={handleFollow}
+                >
+                  {isFollowing ? 'Following' : 'Follow'}
+                </Button>
+                {connectionState === 'request_received' ? (
+                  <div className="flex gap-2">
+                    <Button size="sm" className="text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleAcceptConnectionRequest}>Accept</Button>
+                    <Button size="sm" variant="outline" className="text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleRejectConnectionRequest}>Reject</Button>
+                  </div>
+                ) : connectionState === 'connected' ? (
+                  <Button size="sm" variant="outline" className="text-xs py-1.5 px-3 h-9" disabled>Connected</Button>
+                ) : connectionState === 'request_sent' ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20">Pending</span>
+                ) : (
+                  <Button size="sm" variant="secondary" className="text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleConnect}>Connect</Button>
+                )}
+                <Button size="sm" variant="secondary" className="text-xs py-1.5 px-3 h-9" loading={messageLoading} onClick={handleOpenConversation}>Message</Button>
               </div>
-              <span className="inline-flex items-center rounded-full bg-orange-500 px-3 py-1 text-sm font-semibold text-white">
-                {incomingRequests.length} pending
-              </span>
-            </div>
+            ) : null}
           </div>
-          <div className="divide-y divide-orange-200/80 dark:divide-orange-900/60">
-            {incomingRequests.map((request) => (
-              <div key={request.id} className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <Avatar src={request.sender?.avatar_url || ''} alt={request.sender?.full_name || request.sender?.username} size="sm" />
-                  <div>
-                    <p className="font-semibold text-zinc-900 dark:text-white">{request.sender?.full_name || request.sender?.username}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">@{request.sender?.username}</p>
+
+          {/* Info Details */}
+          <div className="text-left space-y-2">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
+                  {profile.full_name || profile.username}
+                </h1>
+                <span className="rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Founder
+                </span>
+                <div className="flex items-center gap-1 rounded-full border border-zinc-200/60 bg-zinc-100/80 px-2 py-0.5 text-[9px] dark:border-zinc-800/80 dark:bg-zinc-900/50">
+                  <span className="relative flex h-1.5 w-1.5">
+                    {isUserOnline(profile.last_seen) && (
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    )}
+                    <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${isUserOnline(profile.last_seen) ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                  </span>
+                  <span className="font-semibold text-zinc-500 dark:text-zinc-400">
+                    {isUserOnline(profile.last_seen) ? 'Active now' : formatLastSeen(profile.last_seen)}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">@{profile.username}</p>
+            </div>
+
+            {profile.headline && (
+              <p className="text-sm text-zinc-700 dark:text-zinc-350 leading-relaxed">{profile.headline}</p>
+            )}
+
+            {/* Stats row - elegant Threads/X borderless horizontal row */}
+            <div className="flex flex-row items-center flex-wrap gap-x-3 gap-y-1.5 pt-3 pb-1 text-sm font-medium text-zinc-500 dark:text-zinc-400 justify-start">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-zinc-950 dark:text-white">{products.length || profile.products || 0}</span>
+                <span className="text-zinc-500">Products</span>
+              </div>
+              <span className="text-zinc-300 dark:text-zinc-800">|</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-zinc-950 dark:text-white">{profile.followers || 0}</span>
+                <span className="text-zinc-500">Followers</span>
+              </div>
+              <span className="text-zinc-300 dark:text-zinc-800">|</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-zinc-950 dark:text-white">{profile.following || 0}</span>
+                <span className="text-zinc-500">Following</span>
+              </div>
+              <span className="text-zinc-300 dark:text-zinc-800">|</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-zinc-950 dark:text-white">{profile.connections || 0}</span>
+                <span className="text-zinc-500">Connections</span>
+              </div>
+            </div>
+
+            {profileLinks.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {profileLinks.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <a
+                      key={item.label}
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-orange-500 transition-colors"
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{item.label}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+
+            {profile.bio && (
+              <div className="pt-2">
+                <p className="text-sm text-zinc-650 dark:text-zinc-350 leading-relaxed">{profile.bio}</p>
+              </div>
+            )}
+          </div>
+
+          {actionMessage && (
+            <div className="mt-4 rounded-xl border border-orange-300/40 bg-orange-50/80 px-4 py-3 text-sm text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
+              {actionMessage}
+            </div>
+          )}
+
+          {isOwnProfile && incomingRequests.length > 0 && (
+            <div className="mt-6 rounded-xl border border-orange-200 dark:border-orange-900/50 bg-orange-50/10 dark:bg-orange-950/10 overflow-hidden">
+              <div className="px-4 py-3 border-b border-orange-200 dark:border-orange-900/50 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-orange-500">Connection requests</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">Respond to founders who want to connect with you.</p>
+                </div>
+                <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs text-white font-semibold">{incomingRequests.length}</span>
+              </div>
+              <div className="divide-y divide-orange-100 dark:divide-orange-900/40">
+                {incomingRequests.map((request) => (
+                  <div key={request.id} className="flex items-center justify-between p-3 gap-3">
+                    <div className="flex items-center gap-2">
+                      <Avatar src={request.sender?.avatar_url || ''} alt={request.sender?.full_name || request.sender?.username} size="xs" />
+                      <div>
+                        <p className="text-xs font-semibold text-zinc-900 dark:text-white">{request.sender?.full_name || request.sender?.username}</p>
+                        <p className="text-[10px] text-zinc-500">@{request.sender?.username}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button size="sm" className="text-xs py-1 px-2.5 h-7" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleAcceptConnectionRequest(); }}>Accept</Button>
+                      <Button size="sm" variant="outline" className="text-xs py-1 px-2.5 h-7" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleRejectConnectionRequest(); }}>Reject</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Startup Spotlight Card */}
+          {products.length > 0 ? (
+            <div className="mt-6 p-4 border border-orange-500/20 bg-gradient-to-br from-orange-50/40 via-white to-zinc-50/30 dark:from-orange-950/15 dark:via-zinc-950 dark:to-zinc-950/50 rounded-2xl shadow-sm text-left">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-orange-500 mb-3">
+                <Sparkles className="w-3.5 h-3.5" />
+                Startup Spotlight
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4 items-start justify-between">
+                <div className="flex gap-3.5 items-start">
+                  <div className="w-14 h-14 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex-shrink-0 flex items-center justify-center">
+                    {products[0].logo_url ? (
+                      <img src={products[0].logo_url} alt={products[0].name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xl font-bold text-zinc-400">{products[0].name[0]}</span>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white leading-tight">{products[0].name}</h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full border border-orange-200 bg-orange-50 font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 uppercase tracking-wider">{products[0].category}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-350">{products[0].tagline}</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">{products[0].description}</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm" loading={connectLoading} onClick={() => {
-                    setConnectionRequestId(request.id);
-                    handleAcceptConnectionRequest();
-                  }}>
-                    Accept
-                  </Button>
-                  <Button size="sm" variant="outline" loading={connectLoading} onClick={() => {
-                    setConnectionRequestId(request.id);
-                    handleRejectConnectionRequest();
-                  }}>
-                    Reject
-                  </Button>
+                
+                <div className="flex flex-row sm:flex-col gap-2 items-end justify-between w-full sm:w-auto pt-3 sm:pt-0 border-t border-zinc-100 dark:border-zinc-900 sm:border-0">
+                  <div className="flex items-center gap-2">
+                    {products[0].website_url && (
+                      <a
+                        href={products[0].website_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs font-semibold text-zinc-650 dark:text-zinc-350 hover:border-orange-500 hover:text-orange-500 transition-colors"
+                      >
+                        <span>Visit Site</span>
+                        <Globe className="w-3 h-3" />
+                      </a>
+                    )}
+                    <Link
+                      to={`/product/${products[0].id}`}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-950 dark:bg-zinc-105 text-xs font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
+                    >
+                      View Details
+                    </Link>
+                  </div>
                 </div>
               </div>
-            ))}
+            </div>
+          ) : isOwnProfile ? (
+            <div className="mt-6 p-5 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/30 text-center">
+              <Sparkles className="w-6 h-6 text-orange-400 mx-auto mb-2" />
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-white">Feature Your Startup Spotlight</h4>
+              <p className="text-[11px] text-zinc-500 mt-1 max-w-sm mx-auto">Launch a product on StartupHub to prominently feature your startup at the top of your portfolio!</p>
+              <Link to="/launch" className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-orange-500 hover:text-orange-600">
+                Launch Startup now &rarr;
+              </Link>
+            </div>
+          ) : null}
+
+          {/* Sticky Scrollable Tabs */}
+          <div className="mt-6 border-b border-zinc-200 dark:border-zinc-800 sticky top-14 sm:top-16 z-30 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md -mx-2 md:-mx-8 px-2 md:px-8 flex gap-2 overflow-x-auto hide-scrollbar flex-nowrap py-1">
+            {tabItems
+              .filter((tab) => tab.id !== 'saved' || isOwnProfile)
+              .map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-2 text-xs md:text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'border-orange-500 text-orange-500'
+                      : 'border-transparent text-zinc-500 hover:text-zinc-850 dark:hover:text-zinc-300'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
           </div>
-        </div>
-      )}
 
-      <div className="mt-8 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
-        <div className="flex flex-wrap gap-3 border-b border-zinc-200 dark:border-zinc-800 px-4 py-4 sm:px-6">
-          {tabItems.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                activeTab === tab.id
-                  ? 'bg-orange-500 text-white shadow-sm'
-                  : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+          {/* Tab Content Panels */}
+          <div className="py-4">{renderTabContent()}</div>
 
-        <div className="p-6 sm:p-8">{renderTabContent()}</div>
+        </div>
       </div>
     </div>
   );

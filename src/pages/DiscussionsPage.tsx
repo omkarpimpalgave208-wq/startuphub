@@ -36,7 +36,7 @@ export function DiscussionsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full max-w-none min-w-0 md:max-w-6xl md:mx-auto px-4 md:px-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">
@@ -60,7 +60,7 @@ export function DiscussionsPage() {
       </div>
 
       {/* Categories */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto hide-scrollbar flex-nowrap md:flex-wrap w-full py-1">
         {categories.map((category) => (
           <button
             key={category}

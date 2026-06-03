@@ -224,7 +224,7 @@ export function ProductPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full max-w-none min-w-0 md:max-w-5xl md:mx-auto px-4 md:px-0">
       {/* Back link */}
       <Link
         to="/"

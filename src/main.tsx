@@ -8,3 +8,16 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Smooth fade-out and cleanup of PWA Splash Screen
+try {
+  const splash = document.getElementById('pwa-splash');
+  if (splash) {
+    splash.style.opacity = '0';
+    setTimeout(() => {
+      splash.remove();
+    }, 450);
+  }
+} catch (err) {
+  console.warn('Unable to dismiss splash screen:', err);
+}

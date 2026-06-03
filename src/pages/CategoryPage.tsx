@@ -63,7 +63,7 @@ export function CategoryPage() {
   const categoryIcon = categoryIcons[categorySlug] || '📦';
 
   return (
-    <div className="w-full max-w-full">
+    <div className="w-full max-w-none min-w-0 px-4 md:px-0">
       <Link
         to="/"
         className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 mb-4 sm:mb-6"

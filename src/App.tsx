@@ -1,26 +1,28 @@
+import { lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Home } from './pages/Home';
-import { TrendingPage } from './pages/TrendingPage';
-import { RecentPage } from './pages/RecentPage';
-import { MakersPage } from './pages/MakersPage';
-import { CategoryPage } from './pages/CategoryPage';
-import { LoungePage } from './pages/LoungePage';
-import { ProductPage } from './pages/ProductPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { LaunchPage } from './pages/LaunchPage';
-import { DiscussionsPage } from './pages/DiscussionsPage';
-import { DiscussionPage } from './pages/DiscussionPage';
-import { NewDiscussionPage } from './pages/NewDiscussionPage';
-import { LoginPage } from './pages/LoginPage';
-import { SignupPage } from './pages/SignupPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { ConnectionsPage } from './pages/ConnectionsPage';
-import { EditProductPage } from './pages/EditProductPage';
-import { BookmarksPage } from './pages/BookmarksPage';
-import { MessagesPage } from './pages/MessagesPage';
-import { NotFoundPage } from './pages/NotFoundPage';
+
+const TrendingPage = lazy(() => import('./pages/TrendingPage').then(module => ({ default: module.TrendingPage })));
+const RecentPage = lazy(() => import('./pages/RecentPage').then(module => ({ default: module.RecentPage })));
+const MakersPage = lazy(() => import('./pages/MakersPage').then(module => ({ default: module.MakersPage })));
+const CategoryPage = lazy(() => import('./pages/CategoryPage').then(module => ({ default: module.CategoryPage })));
+const LoungePage = lazy(() => import('./pages/LoungePage').then(module => ({ default: module.LoungePage })));
+const ProductPage = lazy(() => import('./pages/ProductPage').then(module => ({ default: module.ProductPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then(module => ({ default: module.ProfilePage })));
+const LaunchPage = lazy(() => import('./pages/LaunchPage').then(module => ({ default: module.LaunchPage })));
+const DiscussionsPage = lazy(() => import('./pages/DiscussionsPage').then(module => ({ default: module.DiscussionsPage })));
+const DiscussionPage = lazy(() => import('./pages/DiscussionPage').then(module => ({ default: module.DiscussionPage })));
+const NewDiscussionPage = lazy(() => import('./pages/NewDiscussionPage').then(module => ({ default: module.NewDiscussionPage })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })));
+const SignupPage = lazy(() => import('./pages/SignupPage').then(module => ({ default: module.SignupPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
+const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage').then(module => ({ default: module.ConnectionsPage })));
+const EditProductPage = lazy(() => import('./pages/EditProductPage').then(module => ({ default: module.EditProductPage })));
+const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then(module => ({ default: module.BookmarksPage })));
+const MessagesPage = lazy(() => import('./pages/MessagesPage').then(module => ({ default: module.MessagesPage })));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(module => ({ default: module.NotFoundPage })));
 
 function App() {
   return (

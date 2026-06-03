@@ -112,7 +112,7 @@ export function ConnectionsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full max-w-none min-w-0 md:max-w-6xl md:mx-auto px-4 md:px-0 py-8">
       <div className="flex items-center justify-between gap-4 mb-8">
         <div>
           <p className="text-sm uppercase tracking-[0.28em] text-orange-500 mb-2">Connections</p>
@@ -121,7 +121,7 @@ export function ConnectionsPage() {
             Manage incoming requests and review the connection requests you've sent across StartupHub.
           </p>
         </div>
-        <Link to={`/profile/${profile?.username ?? ''}`} className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:text-orange-500">
+        <Link to={`/profile/${profile?.username ?? ''}`} className="hidden md:inline-flex items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:text-orange-500">
           <ArrowLeft className="w-4 h-4" />
           Back to profile
         </Link>
@@ -134,10 +134,10 @@ export function ConnectionsPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-sm">
+        <section className="rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 bg-transparent md:bg-white md:dark:bg-zinc-950 p-0 md:p-6 shadow-none md:shadow-sm">
           <div className="flex items-center justify-between gap-4 mb-6">
             <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-zinc-400">Incoming</p>
+              <p className="text-sm uppercase tracking-[0.24em] text-zinc-450">Incoming</p>
               <p className="text-xl font-semibold text-zinc-900 dark:text-white">{incoming.length} pending request{incoming.length === 1 ? '' : 's'}</p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
@@ -180,7 +180,7 @@ export function ConnectionsPage() {
           )}
         </section>
 
-        <section className="rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-sm">
+        <section className="rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 bg-transparent md:bg-white md:dark:bg-zinc-950 p-0 md:p-6 shadow-none md:shadow-sm">
           <div className="flex items-center justify-between gap-4 mb-6">
             <div>
               <p className="text-sm uppercase tracking-[0.24em] text-zinc-400">Sent</p>

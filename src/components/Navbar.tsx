@@ -132,10 +132,10 @@ export function Navbar() {
           <div className="flex items-center justify-between h-14 sm:h-16 w-full">
             {/* Left side */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              {/* Hamburger - visible on mobile, toggle sidebar on desktop */}
+              {/* Hamburger - visible only on desktop */}
               <button
                 onClick={handleToggleSidebar}
-                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0 -ml-1"
+                className="hidden lg:flex p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0 -ml-1"
                 aria-label="Toggle navigation"
               >
                 <Menu className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
@@ -303,6 +303,14 @@ export function Navbar() {
                   </Button>
                 </div>
               )}
+              {/* Mobile Hamburger - far right on mobile, hidden on desktop */}
+              <button
+                onClick={handleToggleSidebar}
+                className="lg:hidden p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0 ml-1"
+                aria-label="Toggle navigation"
+              >
+                <Menu className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+              </button>
             </div>
           </div>
         </div>

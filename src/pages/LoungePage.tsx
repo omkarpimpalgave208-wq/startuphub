@@ -27,7 +27,7 @@ export function LoungePage() {
   };
 
   return (
-    <div className="w-full max-w-full">
+    <div className="w-full max-w-none min-w-0 md:max-w-6xl md:mx-auto px-4 md:px-0">
       {/* Lounge Hero Banner */}
       <div className="w-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 mb-3">

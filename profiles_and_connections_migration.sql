@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS public.connections (
 CREATE TABLE IF NOT EXISTS public.conversations (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_by uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  conversation_type text NOT null DEFAULT 'private' CHECK (conversation_type IN ('private', 'group')),
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -112,50 +113,62 @@ CREATE POLICY "allow_users_to_delete_their_connections" ON public.connections
 -- Conversations Policies
 DROP POLICY IF EXISTS "Allow participants to read conversations" ON public.conversations;
 CREATE POLICY "Allow participants to read conversations" ON public.conversations
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.conversation_participants cp WHERE cp.conversation_id = public.conversations.id AND cp.user_id = auth.uid())
+  FOR SELECT TO authenticated USING (
+    created_by = auth.uid() OR
+    EXISTS (
+      SELECT 1 FROM public.conversation_participants cp 
+      WHERE cp.conversation_id = id AND cp.user_id = auth.uid()
+    )
   );
 
 DROP POLICY IF EXISTS "Allow authenticated users to create conversations" ON public.conversations;
 CREATE POLICY "Allow authenticated users to create conversations" ON public.conversations
-  FOR INSERT WITH CHECK (auth.uid() = created_by);
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = created_by);
 
 -- Conversation Participants Policies
 DROP POLICY IF EXISTS "Allow participants to read conversation participants" ON public.conversation_participants;
-CREATE POLICY "Allow participants to read conversation participants" ON public.conversation_participants
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.conversation_participants cp WHERE cp.conversation_id = public.conversation_participants.conversation_id AND cp.user_id = auth.uid())
-  );
+DROP POLICY IF EXISTS "Allow authenticated users to read conversation participants" ON public.conversation_participants;
+CREATE POLICY "Allow authenticated users to read conversation participants" ON public.conversation_participants
+  FOR SELECT TO authenticated USING (true);
 
 DROP POLICY IF EXISTS "Allow participants to join conversations" ON public.conversation_participants;
 CREATE POLICY "Allow participants to join conversations" ON public.conversation_participants
-  FOR INSERT WITH CHECK (
+  FOR INSERT TO authenticated WITH CHECK (
     auth.uid() = user_id OR auth.uid() = (SELECT created_by FROM public.conversations WHERE id = conversation_id)
   );
 
 DROP POLICY IF EXISTS "Allow participants to delete their own conversation membership" ON public.conversation_participants;
 CREATE POLICY "Allow participants to delete their own conversation membership" ON public.conversation_participants
-  FOR DELETE USING (
+  FOR DELETE TO authenticated USING (
     auth.uid() = user_id OR auth.uid() = (SELECT created_by FROM public.conversations WHERE id = conversation_id)
   );
 
 -- Messages Policies
 DROP POLICY IF EXISTS "Allow participants to read messages" ON public.messages;
 CREATE POLICY "Allow participants to read messages" ON public.messages
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.conversation_participants cp WHERE cp.conversation_id = public.messages.conversation_id AND cp.user_id = auth.uid())
+  FOR SELECT TO authenticated USING (
+    EXISTS (
+      SELECT 1 FROM public.conversation_participants cp 
+      WHERE cp.conversation_id = messages.conversation_id AND cp.user_id = auth.uid()
+    )
   );
 
 DROP POLICY IF EXISTS "Allow participants to send messages" ON public.messages;
 CREATE POLICY "Allow participants to send messages" ON public.messages
-  FOR INSERT WITH CHECK (
-    auth.uid() = sender_id AND EXISTS (SELECT 1 FROM public.conversation_participants cp WHERE cp.conversation_id = public.messages.conversation_id AND cp.user_id = auth.uid())
+  FOR INSERT TO authenticated WITH CHECK (
+    auth.uid() = sender_id AND EXISTS (
+      SELECT 1 FROM public.conversation_participants cp 
+      WHERE cp.conversation_id = messages.conversation_id AND cp.user_id = auth.uid()
+    )
   );
 
 DROP POLICY IF EXISTS "Allow participants to update their own or mark messages read" ON public.messages;
 CREATE POLICY "Allow participants to update their own or mark messages read" ON public.messages
-  FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM public.conversation_participants cp WHERE cp.conversation_id = public.messages.conversation_id AND cp.user_id = auth.uid())
+  FOR UPDATE TO authenticated USING (
+    EXISTS (
+      SELECT 1 FROM public.conversation_participants cp 
+      WHERE cp.conversation_id = messages.conversation_id AND cp.user_id = auth.uid()
+    )
   ) WITH CHECK (
     auth.uid() = sender_id OR (sender_id != auth.uid() AND is_read = true)
   );

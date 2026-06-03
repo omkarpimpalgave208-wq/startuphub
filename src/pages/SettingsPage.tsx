@@ -226,7 +226,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full max-w-none min-w-0 md:max-w-3xl md:mx-auto px-4 md:px-0">
       <h1 className="text-2xl font-bold text-zinc-900 dark:text-white mb-6">
         Settings
       </h1>
