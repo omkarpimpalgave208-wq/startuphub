@@ -99,10 +99,12 @@ export function Navbar() {
       `messages-realtime-${user.id}`,
       'messages',
       '*',
-      () => {
-        refreshUnreadMessagesCount();
-      },
-      `sender_id=neq.${user.id}`
+      (payload) => {
+        const newMessage = payload?.new as any;
+        if (newMessage && newMessage.sender_id !== user.id) {
+          refreshUnreadMessagesCount();
+        }
+      }
     );
 
     return () => {

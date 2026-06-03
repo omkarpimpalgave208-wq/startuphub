@@ -35,8 +35,10 @@ export function MessagesPage() {
 
   useEffect(() => {
     if (!user) return;
-    fetchConversations();
-  }, [user]);
+    if (!conversationId) {
+      fetchConversations();
+    }
+  }, [user, conversationId]);
 
   useEffect(() => {
     if (conversationId) {
@@ -80,13 +82,18 @@ export function MessagesPage() {
             });
             
             if (newMessage.sender_id !== user.id) {
-              await api.markConversationMessagesRead(selectedConversation.id, user.id);
+              try {
+                await api.markConversationMessagesRead(selectedConversation.id, user.id);
+              } catch (err) {
+                console.error('Error marking message read in subscription:', err);
+              }
             }
           }
         }
 
-        // Always reload/update the conversations list to ensure accurate counts and status
-        fetchConversations();
+        // Always reload/update the conversations list silently to ensure accurate counts and status
+        // Awaiting makes sure any concurrent database mark as read operations finish first
+        await fetchConversations(true);
       }
     );
 
@@ -138,9 +145,9 @@ export function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedConversation?.id]);
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (silent = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
 
     try {
@@ -153,7 +160,7 @@ export function MessagesPage() {
       console.error('Error loading conversations:', err);
       setError('Unable to load your conversations. Please refresh.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -164,6 +171,10 @@ export function MessagesPage() {
     setError(null);
 
     try {
+      // 1. Mark all messages in this conversation as read first to guarantee database updates are completed
+      await api.markConversationMessagesRead(id, user.id);
+
+      // 2. Fetch the conversation details (which will now have the updated read status)
       const conversation = await api.getConversation(id, user.id);
       if (!conversation) {
         setSelectedConversation(null);
@@ -173,7 +184,10 @@ export function MessagesPage() {
       }
       setSelectedConversation(conversation);
       setMessages(conversation.messages || []);
-      await api.markConversationMessagesRead(conversation.id, user.id);
+
+      // 3. Immediately refresh the local conversations list in the sidebar so the unread badge is cleared instantly
+      const data = await api.getConversationsForUser(user.id);
+      setConversations(data);
     } catch (err) {
       console.error('Error opening conversation:', err);
       setError((err as Error).message || 'Unable to open the conversation.');
@@ -214,7 +228,7 @@ export function MessagesPage() {
       setMessages((prev) => (prev.some((message) => message.id === sent.id) ? prev : [...prev, sent]));
       setMessageText('');
       await api.markConversationMessagesRead(selectedConversation.id, user.id);
-      await fetchConversations();
+      await fetchConversations(true);
     } catch (err) {
       console.error('Error sending message:', err);
       setError((err as Error).message || 'Unable to send your message.');

@@ -96,13 +96,14 @@ export function Layout() {
       'messages',
       '*',
       (payload) => {
-        refreshUnreadMessagesCount();
         const newMessage = payload?.new as any;
-        if (newMessage && newMessage.content) {
-          showLocalNotification('New message received', newMessage.content);
+        if (newMessage && newMessage.sender_id !== user.id) {
+          refreshUnreadMessagesCount();
+          if (payload.eventType === 'INSERT' && newMessage.content) {
+            showLocalNotification('New message received', newMessage.content);
+          }
         }
-      },
-      `sender_id=neq.${user.id}`
+      }
     );
 
     return () => {
