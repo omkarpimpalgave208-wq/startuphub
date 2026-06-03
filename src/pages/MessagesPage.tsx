@@ -96,6 +96,8 @@ export function MessagesPage() {
   useEffect(() => {
     if (!user || !conversationId) return;
 
+    console.log('Realtime subscribing to conversation:', conversationId);
+
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
@@ -103,28 +105,39 @@ export function MessagesPage() {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`
+          table: 'messages'
         },
         (payload) => {
-          console.log('Realtime message received', payload);
-          appendMessageToState(payload.new);
+          console.log('Realtime payload received', payload);
+          const newMsg = payload.new as Message;
 
-          // Silently update unread badge status / sidebar list
-          if (payload.new && payload.new.sender_id !== user.id) {
-            api.markConversationMessagesRead(conversationId, user.id)
-              .then(() => fetchConversations(true))
-              .catch((err) => console.error('Error marking message read:', err));
-          } else {
-            fetchConversations(true);
+          // Verify that this message belongs to the current conversation
+          if (newMsg && newMsg.conversation_id === conversationId) {
+            appendMessageToState(newMsg);
+
+            // Silently mark as read and update badge if sent by another user
+            if (newMsg.sender_id !== user.id) {
+              api.markConversationMessagesRead(conversationId, user.id)
+                .then(() => fetchConversations(true))
+                .catch((err) => console.error('Error marking message read on realtime INSERT:', err));
+            } else {
+              fetchConversations(true);
+            }
           }
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
         console.log('Realtime status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime subscribed successfully to messages');
+        }
+        if (err || status === 'CHANNEL_ERROR') {
+          console.error('Channel error on messages subscription:', err);
+        }
       });
 
     return () => {
+      console.log(`Tearing down realtime subscription for conversation ${conversationId}`);
       supabase.removeChannel(channel);
     };
   }, [user, conversationId]);
