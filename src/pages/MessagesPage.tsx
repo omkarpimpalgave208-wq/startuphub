@@ -100,10 +100,13 @@ export function MessagesPage() {
   useEffect(() => {
     if (!user || !conversationId) return;
 
-    console.log('Realtime subscribing to conversation:', conversationId);
+    const channelName = `messages:${conversationId}`;
+    console.log('[Realtime Setup] conversationId:', conversationId);
+    console.log('[Realtime Setup] currentUserId:', user.id);
+    console.log('[Realtime Setup] channel name:', channelName);
 
     const channel = supabase
-      .channel(`messages:${conversationId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -112,7 +115,7 @@ export function MessagesPage() {
           table: 'messages'
         },
         (payload) => {
-          console.log('Realtime payload received', payload);
+          console.log('[Realtime Payload Received - INSERT]:', payload);
           const newMsg = payload.new as Message;
 
           // Verify that this message belongs to the current conversation
@@ -130,18 +133,40 @@ export function MessagesPage() {
           }
         }
       )
-      .subscribe((status, err) => {
-        console.log('Realtime status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('Realtime subscribed successfully to messages');
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages'
+        },
+        (payload) => {
+          console.log('[Realtime Payload Received - UPDATE]:', payload);
+          const updatedMsg = payload.new as Message;
+          if (updatedMsg && updatedMsg.conversation_id === conversationId) {
+            setMessages((currentMessages) =>
+              currentMessages.map((msg) =>
+                msg.id === updatedMsg.id ? { ...msg, is_read: updatedMsg.is_read } : msg
+              )
+            );
+          }
         }
-        if (err || status === 'CHANNEL_ERROR') {
-          console.error('Channel error on messages subscription:', err);
+      )
+      .subscribe((status, err) => {
+        console.log('[Realtime Subscription Status]:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime Subscribed] Successfully connected to channel:', channelName);
+        } else if (status === 'CLOSED') {
+          console.log('[Realtime Closed] Channel closed:', channelName);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[Realtime Error] Channel error:', err);
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[Realtime Timeout] Channel timed out:', channelName);
         }
       });
 
     return () => {
-      console.log(`Tearing down realtime subscription for conversation ${conversationId}`);
+      console.log(`Tearing down realtime subscription for channel ${channelName}`);
       supabase.removeChannel(channel);
     };
   }, [user, conversationId]);

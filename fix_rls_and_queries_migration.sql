@@ -37,6 +37,8 @@ DROP POLICY IF EXISTS "Allow creator or partner to join" ON public.conversation_
 DROP POLICY IF EXISTS "Allow creator or partner to leave" ON public.conversation_participants;
 DROP POLICY IF EXISTS "Allow joining conversation" ON public.conversation_participants;
 DROP POLICY IF EXISTS "Allow leaving conversation" ON public.conversation_participants;
+DROP POLICY IF EXISTS "Allow users to read their own participant rows" ON public.conversation_participants;
+DROP POLICY IF EXISTS "Allow members to read conversation participants" ON public.conversation_participants;
 
 -- 2. CREATE SECURITY DEFINER HELPER FUNCTIONS
 
@@ -89,8 +91,14 @@ CREATE POLICY "Allow authenticated users to create conversations" ON public.conv
   );
 
 -- B. CONVERSATION PARTICIPANTS POLICIES
--- SELECT: Users can only read participants of conversations they belong to
-CREATE POLICY "Allow members to read participants" ON public.conversation_participants
+-- SELECT 1: Users can read their own participant rows (subquery-free, Realtime compatible)
+CREATE POLICY "Allow users to read their own participant rows" ON public.conversation_participants
+  FOR SELECT TO authenticated USING (
+    auth.uid() = user_id
+  );
+
+-- SELECT 2: Users can read other participants of conversations they belong to (REST query compatible)
+CREATE POLICY "Allow members to read conversation participants" ON public.conversation_participants
   FOR SELECT TO authenticated USING (
     public.is_conversation_member(conversation_id)
   );
@@ -108,22 +116,22 @@ CREATE POLICY "Allow leaving conversation" ON public.conversation_participants
   );
 
 -- C. MESSAGES POLICIES
--- SELECT: Users can only read messages where they are the sender or recipient
+-- SELECT: Users can read messages where they are the sender or recipient (subquery-free, Realtime compatible)
 CREATE POLICY "Allow sender or recipient to read messages" ON public.messages
   FOR SELECT TO authenticated USING (
-    public.can_access_message(id)
+    auth.uid() = sender_id OR auth.uid() = recipient_id
   );
 
--- INSERT: Simple insert policy allowing authenticated users to send messages where they are the sender
+-- INSERT: Simple insert policy allowing authenticated users to send messages where they are the sender (subquery-free)
 CREATE POLICY "allow_send_messages" ON public.messages
   FOR INSERT TO authenticated WITH CHECK (
     auth.uid() = sender_id
   );
 
--- UPDATE: Users can update their own messages or mark incoming messages as read
+-- UPDATE: Users can update their own messages or mark incoming messages as read (subquery-free, Realtime compatible)
 CREATE POLICY "Allow members to update messages" ON public.messages
   FOR UPDATE TO authenticated USING (
-    public.can_access_message(id)
+    auth.uid() = sender_id OR auth.uid() = recipient_id
   ) WITH CHECK (
     auth.uid() = sender_id OR (auth.uid() = recipient_id AND is_read = true)
   );
