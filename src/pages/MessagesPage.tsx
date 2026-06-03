@@ -64,51 +64,29 @@ export function MessagesPage() {
     const globalMessagesUnsubscribe = api.subscribeToChanges(
       `global-messages-user-${user.id}`,
       'messages',
-      'INSERT',
+      '*', // Subscribe to all changes (INSERT, UPDATE, etc.)
       async (payload) => {
         const newMessage = payload.new as Message;
         if (!newMessage) return;
 
-        // If the new message is in the currently selected conversation, append it instantly
-        if (selectedConversation && newMessage.conversation_id === selectedConversation.id) {
-          setMessages((currentMessages) => {
-            if (currentMessages.some((msg) => msg.id === newMessage.id)) {
-              return currentMessages;
+        if (payload.eventType === 'INSERT') {
+          // If the new message is in the currently selected conversation, append it instantly
+          if (selectedConversation && newMessage.conversation_id === selectedConversation.id) {
+            setMessages((currentMessages) => {
+              if (currentMessages.some((msg) => msg.id === newMessage.id)) {
+                return currentMessages;
+              }
+              return [...currentMessages, newMessage];
+            });
+            
+            if (newMessage.sender_id !== user.id) {
+              await api.markConversationMessagesRead(selectedConversation.id, user.id);
             }
-            return [...currentMessages, newMessage];
-          });
-          
-          if (newMessage.sender_id !== user.id) {
-            await api.markConversationMessagesRead(selectedConversation.id, user.id);
           }
         }
 
-        // Always update the inbox conversations list in real-time so that:
-        // 1. Last message text updates instantly
-        // 2. Unread counts update instantly
-        // 3. Conversation instantly shifts to the top of the list
-        setConversations((currentConvs) => {
-          const matchedIndex = currentConvs.findIndex((c) => c.id === newMessage.conversation_id);
-          if (matchedIndex === -1) {
-            // Reload all to pull the new conversation in real-time
-            fetchConversations();
-            return currentConvs;
-          }
-
-          const updatedConvs = [...currentConvs];
-          const conv = { ...updatedConvs[matchedIndex] };
-
-          conv.last_message = newMessage.content;
-          conv.last_message_at = newMessage.created_at;
-
-          if (newMessage.sender_id !== user.id && (!selectedConversation || selectedConversation.id !== conv.id)) {
-            conv.unread_count = (conv.unread_count || 0) + 1;
-          }
-
-          // Splice from old location and prepend to top
-          updatedConvs.splice(matchedIndex, 1);
-          return [conv, ...updatedConvs];
-        });
+        // Always reload/update the conversations list to ensure accurate counts and status
+        fetchConversations();
       }
     );
 

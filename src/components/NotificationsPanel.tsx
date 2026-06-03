@@ -41,10 +41,10 @@ export function NotificationsPanel({ onClose, onUnreadCountChange }: Notificatio
     const unsubscribe = api.subscribeToChanges(
       `realtime-notifications-${user.id}`,
       'notifications',
-      '*',
+      'INSERT',
       (payload) => {
-        if (payload.new?.user_id === user.id || payload.old?.user_id === user.id) {
-          console.info('[NotificationsPanel] Real-time event received:', payload);
+        if (payload.new?.user_id === user.id) {
+          console.info('[NotificationsPanel] Real-time INSERT event received:', payload);
           fetchNotifications();
         }
       },
@@ -76,7 +76,21 @@ export function NotificationsPanel({ onClose, onUnreadCountChange }: Notificatio
       if (!isMountedRef.current || fetchIdRef.current !== currentFetchId) return;
 
       setNotifications(data);
-      onUnreadCountChange?.(data.filter((notification) => !notification.read).length);
+      
+      const unreadCount = data.filter((n) => !n.read).length;
+      onUnreadCountChange?.(unreadCount);
+
+      // Automatically mark all notifications as read immediately when viewed/panel is opened
+      if (unreadCount > 0) {
+        api.markAllNotificationsRead(user.id).catch((err) => {
+          console.warn('[NotificationsPanel] Error marking all read:', err);
+        });
+
+        // Set all to read locally to immediately clear the badge count in UI
+        const readData = data.map((n) => ({ ...n, read: true }));
+        setNotifications(readData);
+        onUnreadCountChange?.(0);
+      }
     } catch (err) {
       console.error('[NotificationsPanel] Error fetching notifications:', err);
 
