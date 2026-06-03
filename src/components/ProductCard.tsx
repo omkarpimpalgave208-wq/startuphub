@@ -44,7 +44,6 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
     if (isLoading) return;
     setIsLoading(true);
 
-    // Snappy optimistic upvote increment/decrement in the UI
     const previousUpvoted = hasUpvoted;
     setHasUpvoted(!previousUpvoted);
     setUpvotes(prev => prev + (previousUpvoted ? -1 : 1));
@@ -57,7 +56,6 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
       }
     } catch (err) {
       console.error('Failed to update upvote:', err);
-      // Rollback UI to previous counts on failure
       setHasUpvoted(previousUpvoted);
       setUpvotes(prev => prev + (previousUpvoted ? 1 : -1));
     } finally {
@@ -65,25 +63,51 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
     }
   };
 
+  // Helper: Dynamically infer startup stage based on upvotes
+  const getStartupStage = (upvoteCount: number) => {
+    if (upvoteCount <= 5) return 'Idea';
+    if (upvoteCount <= 15) return 'MVP';
+    if (upvoteCount <= 30) return 'Beta';
+    return 'Revenue';
+  };
+
+  // Helper: Generate stable looking-for tags based on startup name
+  const getLookingForTags = (name: string) => {
+    const rolesList = [
+      ['Co-Founder', 'Developer'],
+      ['Designer', 'Developer'],
+      ['Marketer', 'Co-Founder'],
+      ['Developer', 'Designer'],
+      ['Marketer', 'Developer']
+    ];
+    const index = name.charCodeAt(0) % rolesList.length;
+    return rolesList[index];
+  };
+
+  const stage = getStartupStage(upvotes);
+  const lookingFor = getLookingForTags(product.name);
+  const founderName = product.profiles?.full_name || product.profiles?.username || 'Founder';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
+      whileHover={{ y: -3 }}
       className="group w-full"
     >
       <Link to={`/product/${product.id}`} className="block w-full">
         <div className={`
-          w-full bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800
+          w-full bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80
           hover:border-orange-500/30 dark:hover:border-orange-500/30
-          hover:shadow-lg hover:shadow-orange-500/5
+          shadow-sm hover:shadow-xl dark:shadow-none hover:shadow-orange-550/5
           transition-all duration-200
-          ${featured ? 'p-4 sm:p-6' : 'p-3 sm:p-4'}
+          ${featured ? 'p-6 sm:p-8' : 'p-5 sm:p-6'}
         `}>
-          <div className="flex gap-3 sm:gap-4 w-full min-w-0">
+          <div className="flex gap-4 sm:gap-5 w-full min-w-0 items-start">
+            
             {/* Logo */}
             <div className={`
-              flex-shrink-0 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800
+              flex-shrink-0 rounded-2xl overflow-hidden bg-zinc-100 dark:bg-zinc-850 flex items-center justify-center border border-zinc-200/40 dark:border-zinc-800
               ${featured ? 'w-16 h-16 sm:w-20 sm:h-20' : 'w-12 h-12 sm:w-16 sm:h-16'}
             `}>
               {product.logo_url ? (
@@ -93,26 +117,37 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-xl sm:text-2xl font-bold text-zinc-400">
-                    {product.name[0]}
-                  </span>
-                </div>
+                <span className="text-xl sm:text-2xl font-black text-zinc-400 dark:text-zinc-550">
+                  {product.name[0]}
+                </span>
               )}
             </div>
 
-            {/* Content info */}
+            {/* Content Info */}
             <div className="flex-1 min-w-0 overflow-hidden">
-              <div className="flex items-start justify-between gap-2 sm:gap-4">
-                <div className="min-w-0 flex-1">
-                  <h3 className={`
-                    font-semibold text-zinc-900 dark:text-white truncate
-                    ${featured ? 'text-lg sm:text-xl' : 'text-sm sm:text-base'}
-                  `}>
-                    {product.name}
-                  </h3>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className={`
+                      font-bold text-zinc-900 dark:text-white truncate group-hover:text-orange-500 transition-colors
+                      ${featured ? 'text-lg sm:text-2xl' : 'text-base sm:text-lg'}
+                    `}>
+                      {product.name}
+                    </h3>
+                    
+                    {/* Stage Badge */}
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase ${
+                      stage === 'Idea' ? 'bg-orange-500/10 text-orange-500' :
+                      stage === 'MVP' ? 'bg-blue-500/10 text-blue-500' :
+                      stage === 'Beta' ? 'bg-purple-500/10 text-purple-500' :
+                      'bg-emerald-500/10 text-emerald-500'
+                    }`}>
+                      {stage}
+                    </span>
+                  </div>
+                  
                   <p className={`
-                    text-zinc-600 dark:text-zinc-400 mt-0.5 line-clamp-2
+                    text-zinc-500 dark:text-zinc-405 mt-0.5 line-clamp-2 leading-relaxed
                     ${featured ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'}
                   `}>
                     {product.tagline}
@@ -123,40 +158,49 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                 <button
                   onClick={handleUpvote}
                   className={`
-                    flex-shrink-0 flex flex-col items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg
-                    border transition-all duration-200
+                    flex-shrink-0 flex flex-col items-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2.5 rounded-xl
+                    border transition-all duration-200 cursor-pointer
                     ${hasUpvoted
-                      ? 'bg-orange-500 border-orange-500 text-white'
-                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:border-orange-500 hover:text-orange-500'
+                      ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/20'
+                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-orange-500 hover:text-orange-500'
                     }
                   `}
                 >
-                  <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="text-xs sm:text-sm font-semibold">{upvotes}</span>
+                  <ChevronUp className="w-4.5 h-4.5 sm:w-5.5 sm:h-5.5" />
+                  <span className="text-xs sm:text-sm font-bold">{upvotes}</span>
                 </button>
               </div>
 
-              {/* Footer parameters */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 sm:mt-3">
-                <Badge variant="outline" className="text-xs flex-shrink-0">
+              {/* Looking For Tags */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {lookingFor.map((role) => (
+                  <span key={role} className="px-2 py-0.5 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/40 dark:border-zinc-850 text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold">
+                    {role}
+                  </span>
+                ))}
+              </div>
+
+              {/* Card Footer */}
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
+                <Badge variant="outline" className="text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-zinc-50/50 dark:bg-zinc-950/20 py-0.5 px-2 border-zinc-200/60 dark:border-zinc-800 text-zinc-500">
                   {product.category}
                 </Badge>
 
                 {product.profiles && (
-                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Avatar
                       src={product.profiles.avatar_url}
-                      alt={product.profiles.full_name || product.profiles.username}
+                      alt={founderName}
                       size="xs"
                     />
-                    <span className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 truncate">
-                      {product.profiles.full_name || product.profiles.username}
+                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-350 truncate">
+                      {founderName}
                     </span>
                   </div>
                 )}
 
-                <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-500 text-xs sm:text-sm ml-auto flex-shrink-0">
-                  <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4" />
+                <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500 text-xs font-bold ml-auto flex-shrink-0">
+                  <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>{product.comments?.[0]?.count || 0}</span>
                 </div>
 
@@ -166,9 +210,9 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 text-zinc-500 hover:text-orange-500 text-xs sm:text-sm transition-colors flex-shrink-0"
+                    className="flex items-center justify-center w-7 h-7 rounded-lg border border-zinc-200/50 dark:border-zinc-800 hover:border-orange-500 text-zinc-400 hover:text-orange-500 transition-colors flex-shrink-0 cursor-pointer"
                   >
-                    <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
               </div>
