@@ -27,6 +27,10 @@ export function MessagesPage() {
   );
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // WhatsApp-style realtime presence tracking states
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, any>>({});
+  const [partnerActiveInChat, setPartnerActiveInChat] = useState(false);
+
   // Real-time Typing Indicator State & Refs
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -141,6 +145,107 @@ export function MessagesPage() {
       supabase.removeChannel(channel);
     };
   }, [user, conversationId]);
+
+  // A.3 Global Presence Subscription (Track Online/Offline Status)
+  useEffect(() => {
+    if (!user) return;
+
+    const globalPresenceChannel = supabase.channel('presence:global');
+
+    globalPresenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = globalPresenceChannel.presenceState();
+        const mappedUsers: Record<string, any> = {};
+        Object.values(state).forEach((presences: any) => {
+          presences.forEach((p: any) => {
+            if (p.user_id) {
+              mappedUsers[p.user_id] = p;
+            }
+          });
+        });
+        setOnlineUsers(mappedUsers);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await globalPresenceChannel.track({
+            user_id: user.id,
+            online_at: new Date().toISOString()
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(globalPresenceChannel);
+    };
+  }, [user]);
+
+  // A.4 Conversation-Specific Presence Subscription (Detect Partner Viewing Conversation)
+  useEffect(() => {
+    if (!user || !conversationId) {
+      setPartnerActiveInChat(false);
+      return;
+    }
+
+    const conversationPresenceChannel = supabase.channel(`presence:chat:${conversationId}`);
+
+    conversationPresenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = conversationPresenceChannel.presenceState();
+        const partnerId = selectedConversation?.partner?.id;
+        if (partnerId) {
+          const isPartnerHere = Object.values(state).some((presences: any) =>
+            presences.some((p: any) => p.user_id === partnerId)
+          );
+          setPartnerActiveInChat(isPartnerHere);
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await conversationPresenceChannel.track({
+            user_id: user.id,
+            viewing_chat: true
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(conversationPresenceChannel);
+    };
+  }, [user, conversationId, selectedConversation?.partner?.id]);
+
+  // Helper to render read receipts checks
+  const renderReadReceipts = (message: Message) => {
+    if (message.sender_id !== user.id) return null;
+
+    const partnerId = selectedConversation?.partner?.id;
+    const isPartnerOnline = partnerId ? !!onlineUsers[partnerId] : false;
+
+    if (message.is_read) {
+      return (
+        <span className="inline-flex ml-1.5 align-middle text-sky-400" title="Read">
+          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+            <path d="M21 7L9 19l-5.5-5.5 1.41-1.41L9 16.17 19.59 5.59 21 7zm-5.13 0L14.7 5.82 9 11.53 7.42 9.95 6 11.37l3 3 6.87-7.37z" />
+          </svg>
+        </span>
+      );
+    } else if (isPartnerOnline) {
+      return (
+        <span className="inline-flex ml-1.5 align-middle text-zinc-400" title="Delivered">
+          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+            <path d="M21 7L9 19l-5.5-5.5 1.41-1.41L9 16.17 19.59 5.59 21 7zm-5.13 0L14.7 5.82 9 11.53 7.42 9.95 6 11.37l3 3 6.87-7.37z" />
+          </svg>
+        </span>
+      );
+    } else {
+      return (
+        <span className="inline-flex ml-1.5 align-middle text-zinc-400" title="Sent">
+          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+          </svg>
+        </span>
+      );
+    }
+  };
 
   // B. Real-time Typing Indicator Broadcast Channel Subscription
   useEffect(() => {
@@ -340,7 +445,7 @@ export function MessagesPage() {
                     <div className="flex items-start gap-3">
                       <div className="relative flex-shrink-0">
                         <Avatar src={conversation.partner?.avatar_url} alt={conversation.partner?.full_name || conversation.partner?.username} size="sm" />
-                        <span className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full border-2 border-white dark:border-zinc-950 ${isUserOnline(conversation.partner?.last_seen) ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                        <span className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full border-2 border-white dark:border-zinc-950 ${((conversation.partner?.id && onlineUsers[conversation.partner.id]) || isUserOnline(conversation.partner?.last_seen)) ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-zinc-900 dark:text-white truncate">{conversation.partner?.full_name || conversation.partner?.username}</p>
@@ -384,14 +489,14 @@ export function MessagesPage() {
                       size="sm"
                       className="w-9 h-9"
                     />
-                    <span className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full border-2 border-white dark:border-zinc-950 ${isUserOnline(selectedConversation.partner?.last_seen) ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                    <span className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full border-2 border-white dark:border-zinc-950 ${((selectedConversation.partner?.id && onlineUsers[selectedConversation.partner.id]) || isUserOnline(selectedConversation.partner?.last_seen)) ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
                   </div>
                   <div>
                     <h2 className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-white leading-tight">
                       {selectedConversation.partner?.full_name || selectedConversation.partner?.username}
                     </h2>
                     <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-none">
-                      {isUserOnline(selectedConversation.partner?.last_seen) ? 'Active now' : formatLastSeen(selectedConversation.partner?.last_seen)}
+                      {partnerActiveInChat ? 'Online (active in chat)' : ((selectedConversation.partner?.id && onlineUsers[selectedConversation.partner.id]) || isUserOnline(selectedConversation.partner?.last_seen)) ? 'Active now' : formatLastSeen(selectedConversation.partner?.last_seen)}
                     </p>
                   </div>
                 </div>
@@ -441,10 +546,11 @@ export function MessagesPage() {
                             : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-bl-none border border-zinc-200/40 dark:border-zinc-700/30'
                         }`}>
                           <p className="text-sm leading-relaxed">{message.content}</p>
-                          <p className={`mt-1 text-[9px] uppercase tracking-[0.15em] font-medium text-right ${
+                          <p className={`mt-1 text-[9px] uppercase tracking-[0.15em] font-medium text-right flex items-center justify-end gap-1.5 ${
                             isSender ? 'text-orange-200' : 'text-zinc-400 dark:text-zinc-500'
                           }`}>
-                            {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            <span>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            {renderReadReceipts(message)}
                           </p>
                         </div>
                       </div>
