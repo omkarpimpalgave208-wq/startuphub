@@ -1168,67 +1168,118 @@ export const api = {
         .select('conversation_id')
         .eq('user_id', userId);
 
-      if (partError) throw partError;
+      if (partError) {
+        console.error('[getConversationsForUser] Error fetching user participants:', partError);
+        throw partError;
+      }
       const conversationIds = (partRows || []).map((r) => r.conversation_id).filter(Boolean);
       if (conversationIds.length === 0) return [];
 
-      // 2. Fetch conversations, participants, unread counts, and latest messages in optimized parallel queries
-      const [convRes, unreadRes, lastMsgsRes] = await Promise.all([
-        supabase
-          .from('conversations')
-          .select(`
-            id,
-            conversation_type,
-            created_at,
-            participants:conversation_participants (
-              user_id,
-              profiles:user_id (*)
-            )
-          `)
-          .in('id', conversationIds),
-        
-        supabase
-          .from('messages')
-          .select('conversation_id')
-          .in('conversation_id', conversationIds)
-          .eq('is_read', false)
-          .neq('sender_id', userId),
+      // 2. Fetch conversations, participants, unread counts, and latest messages sequentially to avoid recursive RLS / subquery limits
+      const { data: conversationsData, error: conversationsError } = await supabase
+        .from('conversations')
+        .select('id, conversation_type, created_at')
+        .in('id', conversationIds);
 
-        Promise.all(
-          conversationIds.map(async (cid) => {
-            const { data } = await supabase
+      if (conversationsError) {
+        console.error('[getConversationsForUser] Error fetching conversations:', conversationsError);
+        throw conversationsError;
+      }
+
+      // Fetch participants for these conversations
+      const { data: allParticipantsData, error: allParticipantsError } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id, user_id')
+        .in('conversation_id', conversationIds);
+
+      if (allParticipantsError) {
+        console.error('[getConversationsForUser] Error fetching participants list:', allParticipantsError);
+        throw allParticipantsError;
+      }
+
+      // Fetch profiles of all unique participants
+      const distinctUserIds = [...new Set((allParticipantsData || []).map((p) => p.user_id))];
+      let profilesMap: Record<string, Profile> = {};
+
+      if (distinctUserIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', distinctUserIds);
+
+        if (profilesError) {
+          console.error('[getConversationsForUser] Error fetching participant profiles:', profilesError);
+          throw profilesError;
+        }
+
+        profilesMap = (profilesData || []).reduce<Record<string, Profile>>((acc, row) => {
+          acc[row.id] = api.normalizeProfileRow(row);
+          return acc;
+        }, {});
+      }
+
+      // Group participants by conversation_id
+      const participantsByConversation: Record<string, Profile[]> = {};
+      (allParticipantsData || []).forEach((p) => {
+        const profile = profilesMap[p.user_id];
+        if (profile) {
+          if (!participantsByConversation[p.conversation_id]) {
+            participantsByConversation[p.conversation_id] = [];
+          }
+          participantsByConversation[p.conversation_id].push(profile);
+        }
+      });
+
+      // Fetch unread message counts for each conversation
+      const { data: unreadData, error: unreadError } = await supabase
+        .from('messages')
+        .select('conversation_id')
+        .in('conversation_id', conversationIds)
+        .eq('is_read', false)
+        .neq('sender_id', userId);
+
+      if (unreadError) {
+        console.error('[getConversationsForUser] Error fetching unread counts:', unreadError);
+        throw unreadError;
+      }
+
+      const unreadCountMap: Record<string, number> = {};
+      (unreadData || []).forEach((row) => {
+        unreadCountMap[row.conversation_id] = (unreadCountMap[row.conversation_id] || 0) + 1;
+      });
+
+      // Fetch latest messages for each conversation
+      const lastMessagesList = await Promise.all(
+        conversationIds.map(async (cid) => {
+          try {
+            const { data, error } = await supabase
               .from('messages')
               .select('content, created_at, sender_id, is_read')
               .eq('conversation_id', cid)
               .order('created_at', { ascending: false })
               .limit(1);
+
+            if (error) {
+              console.error(`[getConversationsForUser] Error fetching latest message for ${cid}:`, error);
+              return { conversation_id: cid, lastMessage: null };
+            }
             return { conversation_id: cid, lastMessage: data?.[0] || null };
-          })
-        )
-      ]);
+          } catch (lastMsgErr) {
+            console.error(`[getConversationsForUser] Exception fetching latest message for ${cid}:`, lastMsgErr);
+            return { conversation_id: cid, lastMessage: null };
+          }
+        })
+      );
 
-      if (convRes.error) throw convRes.error;
-
-      // Map unread counts
-      const unreadCountMap: Record<string, number> = {};
-      (unreadRes.data || []).forEach((row) => {
-        unreadCountMap[row.conversation_id] = (unreadCountMap[row.conversation_id] || 0) + 1;
-      });
-
-      // Map last messages
       const lastMessageMap: Record<string, any> = {};
-      (lastMsgsRes || []).forEach((item) => {
+      lastMessagesList.forEach((item) => {
         if (item.lastMessage) {
           lastMessageMap[item.conversation_id] = item.lastMessage;
         }
       });
 
-      const conversations = (convRes.data || []).map((conversation: any) => {
-        const participantsData = Array.isArray(conversation.participants) ? conversation.participants : [];
-        const participants = participantsData
-          .map((participant: any) => participant.profiles)
-          .filter(Boolean) as Profile[];
-
+      const conversations = (conversationsData || []).map((conversation: any) => {
+        const participants = participantsByConversation[conversation.id] || [];
         const conversationType = (conversation.conversation_type as 'private' | 'group') || 'private';
         let partner: Profile;
 
@@ -1278,84 +1329,138 @@ export const api = {
         return bTime - aTime;
       });
     } catch (err) {
-      console.warn('[api.getConversationsForUser] Exception fetching conversations:', err);
+      console.error('[api.getConversationsForUser] Exception fetching conversations:', err);
       return [];
     }
   },
 
   async getConversation(conversationId: string, userId: string): Promise<Conversation | null> {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select(`
-        *,
-        participants:conversation_participants (
-          user_id,
-          profiles:user_id (*)
-        ),
-        messages:messages (
-          *,
-          sender:sender_id (*)
-        )
-      `)
-      .eq('id', conversationId)
-      .single();
+    try {
+      // 1. Fetch conversation row
+      const { data: conversationData, error: conversationError } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') return null;
-      throw error;
+      if (conversationError) {
+        if (conversationError.code === 'PGRST116') {
+          console.warn(`[getConversation] Conversation not found: ${conversationId}`);
+          return null;
+        }
+        console.error('[getConversation] Supabase error loading conversation:', conversationError);
+        throw conversationError;
+      }
+
+      // 2. Fetch conversation participants
+      const { data: participantsRows, error: participantsError } = await supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', conversationId);
+
+      if (participantsError) {
+        console.error('[getConversation] Supabase error loading participants:', participantsError);
+        throw participantsError;
+      }
+
+      const participantUserIds = (participantsRows || []).map((r) => r.user_id);
+      let participants: Profile[] = [];
+
+      if (participantUserIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', participantUserIds);
+
+        if (profilesError) {
+          console.error('[getConversation] Supabase error loading profiles for participants:', profilesError);
+          throw profilesError;
+        }
+        participants = (profilesData || []).map((p) => api.normalizeProfileRow(p));
+      }
+
+      // 3. Fetch messages for the conversation
+      const { data: messagesRows, error: messagesError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
+
+      if (messagesError) {
+        console.error('[getConversation] Supabase error loading messages:', messagesError);
+        throw messagesError;
+      }
+
+      // Fetch profiles for the senders of these messages
+      const senderIds = [...new Set((messagesRows || []).map((m) => m.sender_id))];
+      let sendersMap: Record<string, Profile> = {};
+
+      if (senderIds.length > 0) {
+        const { data: sendersData, error: sendersError } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', senderIds);
+
+        if (sendersError) {
+          console.error('[getConversation] Supabase error loading message senders profiles:', sendersError);
+          throw sendersError;
+        }
+
+        sendersMap = (sendersData || []).reduce<Record<string, Profile>>((acc, row) => {
+          acc[row.id] = api.normalizeProfileRow(row);
+          return acc;
+        }, {});
+      }
+
+      const messages: Message[] = (messagesRows || []).map((m: any) => ({
+        ...m,
+        sender: sendersMap[m.sender_id]
+      }));
+
+      const conversationType = (conversationData.conversation_type as 'private' | 'group') || 'private';
+      let partner: Profile;
+
+      if (conversationType === 'group') {
+        partner = {
+          id: 'group',
+          username: `Group (${participants.length} members)`,
+          full_name: `Group Chat (${participants.length} members)`,
+          avatar_url: null,
+          headline: `Group conversation with ${participants.length} members`,
+          bio: null,
+          github_url: null,
+          twitter_url: null,
+          linkedin_url: null
+        };
+      } else {
+        partner = participants.find((p) => p.id !== userId) || participants[0] || {
+          id: 'unknown',
+          username: 'unknown',
+          full_name: 'Unknown User',
+          avatar_url: null,
+          headline: null,
+          bio: null,
+          github_url: null,
+          twitter_url: null,
+          linkedin_url: null
+        };
+      }
+
+      return {
+        id: conversationData.id,
+        created_at: conversationData.created_at,
+        conversation_type: conversationType,
+        participants,
+        partner,
+        messages,
+        unread_count: messages.filter((message) => !message.is_read && message.sender_id !== userId).length,
+        last_message: messages.length > 0 ? messages[messages.length - 1].content : undefined,
+        last_message_at: messages.length > 0 ? messages[messages.length - 1].created_at : undefined,
+      } as Conversation;
+    } catch (err) {
+      console.error('[api.getConversation] Exception fetching conversation detail:', err);
+      throw err;
     }
-
-    const participantsData = Array.isArray(data.participants) ? data.participants : [];
-    const messagesData = Array.isArray(data.messages) ? data.messages : [];
-
-    const participants = participantsData
-      .map((participant: any) => participant.profiles)
-      .filter(Boolean) as Profile[];
-
-    const conversationType = (data.conversation_type as 'private' | 'group') || 'private';
-    let partner: Profile;
-
-    if (conversationType === 'group') {
-      partner = {
-        id: 'group',
-        username: `Group (${participants.length} members)`,
-        full_name: `Group Chat (${participants.length} members)`,
-        avatar_url: null,
-        headline: `Group conversation with ${participants.length} members`,
-        bio: null,
-        github_url: null,
-        twitter_url: null,
-        linkedin_url: null
-      };
-    } else {
-      partner = participants.find((participant) => participant.id !== userId) || participants[0] || {
-        id: 'unknown',
-        username: 'unknown',
-        full_name: 'Unknown User',
-        avatar_url: null,
-        headline: null,
-        bio: null,
-        github_url: null,
-        twitter_url: null,
-        linkedin_url: null
-      };
-    }
-
-    const sortedMessages = [...messagesData].sort(
-      (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
-
-    return {
-      id: data.id,
-      created_at: data.created_at,
-      conversation_type: conversationType,
-      participants,
-      partner,
-      messages: sortedMessages as Message[],
-      unread_count: sortedMessages.filter((message: any) => !message.is_read && message.sender_id !== userId).length,
-      last_message: sortedMessages.length > 0 ? (sortedMessages[sortedMessages.length - 1].content as string) : undefined,
-      last_message_at: sortedMessages.length > 0 ? (sortedMessages[sortedMessages.length - 1].created_at as string) : undefined,
-    } as Conversation;
   },
 
   async openConversation(userId: string, otherUserId: string): Promise<Conversation> {
@@ -1363,93 +1468,120 @@ export const api = {
       throw new Error('You cannot open a conversation with yourself.');
     }
 
-    // -----------------------------------------------------------------
-    // STEP 1: Search for an existing private 1-to-1 conversation
-    // -----------------------------------------------------------------
-    // Fetch all 'private' conversations that the current user is a participant of.
-    // The SELECT policy ensures we only retrieve conversations where we are a participant or creator.
-    const { data: conversations, error: searchError } = await supabase
-      .from('conversations')
-      .select(`
-        id,
-        conversation_type,
-        conversation_participants (
-          user_id
-        )
-      `)
-      .eq('conversation_type', 'private');
+    try {
+      // 1. Fetch conversations of type 'private' where the current user is a participant
+      const { data: myPartRows, error: myPartError } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', userId);
 
-    if (searchError) {
-      console.error('[Chat Search Error]:', searchError);
-      throw searchError;
-    }
+      if (myPartError) {
+        console.error('[openConversation] Error searching my conversation participants:', myPartError);
+        throw myPartError;
+      }
 
-    // Match exactly 2 participants: userId and otherUserId
-    const existingConv = conversations?.find((conv) => {
-      const participantIds = conv.conversation_participants?.map((p: any) => p.user_id) || [];
-      return (
-        participantIds.length === 2 &&
-        participantIds.includes(userId) &&
-        participantIds.includes(otherUserId)
-      );
-    });
+      const myConvIds = (myPartRows || []).map((r) => r.conversation_id).filter(Boolean);
+      let existingConvId: string | null = null;
 
-    if (existingConv) {
-      const conversation = await this.getConversation(existingConv.id, userId);
-      if (!conversation) throw new Error('Unable to load conversation.');
-      return conversation;
-    }
+      if (myConvIds.length > 0) {
+        // Fetch all participants for these conversations
+        const { data: allParts, error: allPartsError } = await supabase
+          .from('conversation_participants')
+          .select('conversation_id, user_id')
+          .in('conversation_id', myConvIds);
 
-    // -----------------------------------------------------------------
-    // STEP 2: Pre-generate a conversation ID (client-side UUID generation)
-    // -----------------------------------------------------------------
-    const newConversationId = typeof window !== 'undefined' && window.crypto?.randomUUID 
-      ? window.crypto.randomUUID() 
-      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : (r & 0x3) | 0x8;
-          return v.toString(16);
+        if (allPartsError) {
+          console.error('[openConversation] Error fetching all conversation participants:', allPartsError);
+          throw allPartsError;
+        }
+
+        // Group participants by conversation_id
+        const partsByConv: Record<string, string[]> = {};
+        (allParts || []).forEach((p) => {
+          if (!partsByConv[p.conversation_id]) {
+            partsByConv[p.conversation_id] = [];
+          }
+          partsByConv[p.conversation_id].push(p.user_id);
         });
 
-    // -----------------------------------------------------------------
-    // STEP 3: Sequential RLS Bypass Insertion Flow
-    // -----------------------------------------------------------------
+        // Get conversations details to filter only private conversations
+        const { data: convTypes, error: convTypesError } = await supabase
+          .from('conversations')
+          .select('id, conversation_type')
+          .in('id', myConvIds);
 
-    // 1. Create the conversation row with type 'private'
-    const { error: conversationError } = await supabase
-      .from('conversations')
-      .insert({
-        id: newConversationId,
-        created_by: userId,
-        conversation_type: 'private'
-      });
+        if (convTypesError) {
+          console.error('[openConversation] Error fetching conversation types:', convTypesError);
+          throw convTypesError;
+        }
 
-    if (conversationError) {
-      throw conversationError;
+        const privateConvs = (convTypes || [])
+          .filter((c) => c.conversation_type === 'private')
+          .map((c) => c.id);
+
+        const matchedConv = privateConvs.find((cid) => {
+          const uids = partsByConv[cid] || [];
+          return uids.length === 2 && uids.includes(userId) && uids.includes(otherUserId);
+        });
+
+        if (matchedConv) {
+          existingConvId = matchedConv;
+        }
+      }
+
+      if (existingConvId) {
+        const conversation = await this.getConversation(existingConvId, userId);
+        if (!conversation) throw new Error('Unable to load conversation.');
+        return conversation;
+      }
+
+      // Create new private 1-to-1 conversation
+      const newConversationId = typeof window !== 'undefined' && window.crypto?.randomUUID 
+        ? window.crypto.randomUUID() 
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
+
+      const { error: conversationError } = await supabase
+        .from('conversations')
+        .insert({
+          id: newConversationId,
+          created_by: userId,
+          conversation_type: 'private'
+        });
+
+      if (conversationError) {
+        console.error('[openConversation] Error inserting conversations row:', conversationError);
+        throw conversationError;
+      }
+
+      const { error: creatorPartError } = await supabase
+        .from('conversation_participants')
+        .insert({ conversation_id: newConversationId, user_id: userId });
+
+      if (creatorPartError) {
+        console.error('[openConversation] Error inserting creator participant row:', creatorPartError);
+        throw creatorPartError;
+      }
+
+      const { error: partnerPartError } = await supabase
+        .from('conversation_participants')
+        .insert({ conversation_id: newConversationId, user_id: otherUserId });
+
+      if (partnerPartError) {
+        console.error('[openConversation] Error inserting partner participant row:', partnerPartError);
+        throw partnerPartError;
+      }
+
+      const conversation = await this.getConversation(newConversationId, userId);
+      if (!conversation) throw new Error('Unable to load newly created conversation.');
+      return conversation;
+    } catch (err) {
+      console.error('[api.openConversation] Exception opening conversation:', err);
+      throw err;
     }
-
-    // 2. Insert creator's participant row first
-    const { error: creatorPartError } = await supabase
-      .from('conversation_participants')
-      .insert({ conversation_id: newConversationId, user_id: userId });
-
-    if (creatorPartError) {
-      throw creatorPartError;
-    }
-
-    // 3. Insert partner's participant row second
-    const { error: partnerPartError } = await supabase
-      .from('conversation_participants')
-      .insert({ conversation_id: newConversationId, user_id: otherUserId });
-
-    if (partnerPartError) {
-      throw partnerPartError;
-    }
-
-    // 4. Load the conversation successfully since RLS is satisfied for the active user
-    const conversation = await this.getConversation(newConversationId, userId);
-    if (!conversation) throw new Error('Unable to load newly created conversation.');
-    return conversation;
   },
 
   async sendMessage(conversationId: string, senderId: string, content: string, recipientId?: string): Promise<Message> {
@@ -1458,61 +1590,103 @@ export const api = {
       throw new Error('Message content cannot be empty.');
     }
 
-    let finalRecipientId = recipientId;
-    let recipientsList = recipientId ? [recipientId] : [];
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
 
-    if (!finalRecipientId) {
-      // 1. Fetch conversation participants to extract recipient_id as fallback
-      const { data: participantRows, error: participantError } = await supabase
-        .from('conversation_participants')
-        .select('user_id')
-        .eq('conversation_id', conversationId);
-
-      if (participantError) {
-        console.error('[API] Failed to load conversation participants for message recipient:', participantError);
+      if (!user) {
+        throw new Error('User not authenticated.');
       }
-      
-      finalRecipientId = (participantRows || [])
-        .map((row) => row.user_id)
-        .find((userId) => userId !== senderId);
 
-      recipientsList = (participantRows || [])
-        .map((row) => row.user_id)
-        .filter((userId) => userId !== senderId);
-    }
+      const sender_id = user.id;
+      const conversation_id = conversationId;
 
-    // 2. Insert message with recipient_id
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({ 
-        conversation_id: conversationId, 
-        sender_id: senderId, 
-        recipient_id: finalRecipientId, 
-        content: trimmed 
-      })
-      .select(`*, sender:sender_id (*)`)
-      .single();
+      let finalRecipientId = recipientId;
+      let recipientsList = recipientId ? [recipientId] : [];
 
-    if (error) throw error;
+      if (!finalRecipientId) {
+        const { data: participantRows, error: participantError } = await supabase
+          .from('conversation_participants')
+          .select('user_id')
+          .eq('conversation_id', conversationId);
 
-    // 3. Create notifications for recipients
-    if (recipientsList.length > 0) {
-      try {
-        await supabase.from('notifications').insert(
-          recipientsList.map((rId) => ({
-            user_id: rId,
-            actor_id: senderId,
-            conversation_id: conversationId,
-            type: 'message',
-            message: 'sent you a message'
-          }))
-        );
-      } catch (notificationError) {
-        console.error('[API] Failed to create message notification:', notificationError);
+        if (participantError) {
+          console.error('[sendMessage] Failed to load conversation participants for message recipient:', participantError);
+          throw participantError;
+        }
+
+        finalRecipientId = (participantRows || [])
+          .map((row) => row.user_id)
+          .find((userId) => userId !== sender_id);
+
+        recipientsList = (participantRows || [])
+          .map((row) => row.user_id)
+          .filter((userId) => userId !== sender_id);
       }
-    }
 
-    return data as unknown as Message;
+      const recipient_id = finalRecipientId;
+
+      console.log("Current User:", user?.id);
+      console.log("Sender ID:", sender_id);
+      console.log("Conversation ID:", conversation_id);
+
+      // Insert message flat row
+      const { data: insertedMsg, error: insertError } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id,
+          sender_id: user.id,
+          recipient_id,
+          content: trimmed
+        })
+        .select('*')
+        .single();
+
+      if (insertError) {
+        console.error('[sendMessage] Error inserting message row:', insertError);
+        throw insertError;
+      }
+
+      // Fetch sender profile flat row
+      const { data: senderProfileRow, error: senderProfileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', sender_id)
+        .single();
+
+      if (senderProfileError) {
+        console.warn('[sendMessage] Failed to fetch sender profile for returned message:', senderProfileError);
+      }
+
+      const senderProfile = senderProfileRow ? api.normalizeProfileRow(senderProfileRow) : undefined;
+      const message: Message = {
+        ...insertedMsg,
+        sender: senderProfile
+      };
+
+      // Create notifications for recipients in background
+      if (recipientsList.length > 0) {
+        try {
+          await supabase.from('notifications').insert(
+            recipientsList.map((rId) => ({
+              user_id: rId,
+              actor_id: sender_id,
+              conversation_id: conversationId,
+              type: 'message',
+              message: 'sent you a message'
+            }))
+          );
+        } catch (notificationError) {
+          console.error('[sendMessage] Failed to create message notifications:', notificationError);
+        }
+      }
+
+      return message;
+    } catch (err) {
+      console.error('[api.sendMessage] Exception sending message:', err);
+      throw err;
+    }
   },
 
 
@@ -1608,7 +1782,17 @@ export const api = {
             callback(payload);
           }
         )
-        .subscribe();
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            console.info(`[Realtime] Successfully subscribed to ${tableName} updates on channel: ${uniqueChannelName}`);
+          } else if (status === 'CLOSED') {
+            console.info(`[Realtime] Subscription closed for ${tableName} on channel: ${uniqueChannelName}`);
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error(`[Realtime] Channel error subscribing to ${tableName} on channel ${uniqueChannelName}:`, err);
+          } else if (status === 'TIMED_OUT') {
+            console.warn(`[Realtime] Subscription timed out subscribing to ${tableName} on channel ${uniqueChannelName}`);
+          }
+        });
 
       return () => {
         try {
@@ -1618,7 +1802,7 @@ export const api = {
         }
       };
     } catch (err) {
-      console.warn('[api.subscribeToChanges] Realtime subscription failed to initialize:', err);
+      console.error('[api.subscribeToChanges] Realtime subscription failed to initialize:', err);
       return () => {};
     }
   }

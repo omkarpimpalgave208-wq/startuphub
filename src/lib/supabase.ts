@@ -157,6 +157,7 @@ export interface MessageRow {
   id: string;
   conversation_id: string;
   sender_id: string;
+  recipient_id?: string | null;
   content: string;
   is_read: boolean;
   created_at: string;
@@ -238,7 +239,7 @@ export type Database = {
       };
       messages: {
         Row: MessageRow;
-        Insert: Partial<MessageRow> & { conversation_id: string; sender_id: string; content: string };
+        Insert: Partial<MessageRow> & { conversation_id: string; sender_id: string; recipient_id?: string | null; content: string };
         Update: Partial<MessageRow>;
       };
     };
