@@ -9,6 +9,30 @@ import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import { isUserOnline, formatLastSeen } from '../utils/presence';
 
+const channelRefCounts: Record<string, number> = {};
+const pendingChannelCleanups: Record<string, NodeJS.Timeout> = {};
+
+function subscribeWithRefCount(channelName: string, createChannelFn: () => any): any {
+  if (pendingChannelCleanups[channelName]) {
+    clearTimeout(pendingChannelCleanups[channelName]);
+    delete pendingChannelCleanups[channelName];
+  }
+  channelRefCounts[channelName] = (channelRefCounts[channelName] || 0) + 1;
+  return createChannelFn();
+}
+
+function unsubscribeWithRefCount(channelName: string, channel: any) {
+  channelRefCounts[channelName] = Math.max(0, (channelRefCounts[channelName] || 1) - 1);
+  if (channelRefCounts[channelName] === 0) {
+    pendingChannelCleanups[channelName] = setTimeout(() => {
+      if (channelRefCounts[channelName] === 0) {
+        supabase.removeChannel(channel);
+        delete pendingChannelCleanups[channelName];
+      }
+    }, 1000);
+  }
+}
+
 export function MessagesPage() {
   const { user } = useAuthStore();
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -100,10 +124,11 @@ export function MessagesPage() {
   useEffect(() => {
     if (!user || !conversationId) return;
 
-    const channelName = `messages:${conversationId}`;
+    const uniqueSuffix = Math.random().toString(36).substring(2, 11);
+    const channelName = `messages:${conversationId}-${uniqueSuffix}`;
+    console.log('channel name:', channelName);
     console.log('[Realtime Setup] conversationId:', conversationId);
     console.log('[Realtime Setup] currentUserId:', user.id);
-    console.log('[Realtime Setup] channel name:', channelName);
 
     const channel = supabase
       .channel(channelName)
@@ -115,6 +140,7 @@ export function MessagesPage() {
           table: 'messages'
         },
         (payload) => {
+          console.log('payload received', payload);
           console.log('[Realtime Payload Received - INSERT]:', payload);
           const newMsg = payload.new as Message;
 
@@ -141,6 +167,7 @@ export function MessagesPage() {
           table: 'messages'
         },
         (payload) => {
+          console.log('payload received', payload);
           console.log('[Realtime Payload Received - UPDATE]:', payload);
           const updatedMsg = payload.new as Message;
           if (updatedMsg && updatedMsg.conversation_id === conversationId) {
@@ -155,10 +182,12 @@ export function MessagesPage() {
       .subscribe((status, err) => {
         console.log('[Realtime Subscription Status]:', status);
         if (status === 'SUBSCRIBED') {
+          console.log('SUBSCRIBED');
           console.log('[Realtime Subscribed] Successfully connected to channel:', channelName);
         } else if (status === 'CLOSED') {
           console.log('[Realtime Closed] Channel closed:', channelName);
         } else if (status === 'CHANNEL_ERROR') {
+          console.error('CHANNEL_ERROR', err);
           console.error('[Realtime Error] Channel error:', err);
         } else if (status === 'TIMED_OUT') {
           console.warn('[Realtime Timeout] Channel timed out:', channelName);
@@ -175,7 +204,8 @@ export function MessagesPage() {
   useEffect(() => {
     if (!user) return;
 
-    const globalPresenceChannel = supabase.channel('presence:global');
+    const channelName = 'presence:global';
+    const globalPresenceChannel = subscribeWithRefCount(channelName, () => supabase.channel(channelName));
 
     globalPresenceChannel
       .on('presence', { event: 'sync' }, () => {
@@ -200,7 +230,7 @@ export function MessagesPage() {
       });
 
     return () => {
-      supabase.removeChannel(globalPresenceChannel);
+      unsubscribeWithRefCount(channelName, globalPresenceChannel);
     };
   }, [user]);
 
@@ -211,7 +241,8 @@ export function MessagesPage() {
       return;
     }
 
-    const conversationPresenceChannel = supabase.channel(`presence:chat:${conversationId}`);
+    const channelName = `presence:chat:${conversationId}`;
+    const conversationPresenceChannel = subscribeWithRefCount(channelName, () => supabase.channel(channelName));
 
     conversationPresenceChannel
       .on('presence', { event: 'sync' }, () => {
@@ -234,7 +265,7 @@ export function MessagesPage() {
       });
 
     return () => {
-      supabase.removeChannel(conversationPresenceChannel);
+      unsubscribeWithRefCount(channelName, conversationPresenceChannel);
     };
   }, [user, conversationId, selectedConversation?.partner?.id]);
 
@@ -276,11 +307,12 @@ export function MessagesPage() {
   useEffect(() => {
     if (!selectedConversation || !user) return;
 
-    const channel = supabase.channel(`typing:${selectedConversation.id}`, {
+    const channelName = `typing:${selectedConversation.id}`;
+    const channel = subscribeWithRefCount(channelName, () => supabase.channel(channelName, {
       config: {
         broadcast: { self: false }
       }
-    });
+    }));
 
     channel
       .on('broadcast', { event: 'typing' }, (payload: any) => {
@@ -302,7 +334,7 @@ export function MessagesPage() {
 
     return () => {
       if (channel) {
-        supabase.removeChannel(channel);
+        unsubscribeWithRefCount(channelName, channel);
       }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
