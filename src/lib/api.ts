@@ -1452,51 +1452,69 @@ export const api = {
     return conversation;
   },
 
-  async sendMessage(conversationId: string, senderId: string, content: string): Promise<Message> {
+  async sendMessage(conversationId: string, senderId: string, content: string, recipientId?: string): Promise<Message> {
     const trimmed = content.trim();
     if (!trimmed) {
       throw new Error('Message content cannot be empty.');
     }
 
+    let finalRecipientId = recipientId;
+    let recipientsList = recipientId ? [recipientId] : [];
+
+    if (!finalRecipientId) {
+      // 1. Fetch conversation participants to extract recipient_id as fallback
+      const { data: participantRows, error: participantError } = await supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', conversationId);
+
+      if (participantError) {
+        console.error('[API] Failed to load conversation participants for message recipient:', participantError);
+      }
+      
+      finalRecipientId = (participantRows || [])
+        .map((row) => row.user_id)
+        .find((userId) => userId !== senderId);
+
+      recipientsList = (participantRows || [])
+        .map((row) => row.user_id)
+        .filter((userId) => userId !== senderId);
+    }
+
+    // 2. Insert message with recipient_id
     const { data, error } = await supabase
       .from('messages')
-      .insert({ conversation_id: conversationId, sender_id: senderId, content: trimmed })
+      .insert({ 
+        conversation_id: conversationId, 
+        sender_id: senderId, 
+        recipient_id: finalRecipientId, 
+        content: trimmed 
+      })
       .select(`*, sender:sender_id (*)`)
       .single();
 
     if (error) throw error;
 
-    const { data: participantRows, error: participantError } = await supabase
-      .from('conversation_participants')
-      .select('user_id')
-      .eq('conversation_id', conversationId);
-
-    if (participantError) {
-      console.error('[API] Failed to load conversation participants for message notification:', participantError);
-    } else {
-      const recipients = (participantRows || [])
-        .map((row) => row.user_id)
-        .filter((userId) => userId !== senderId);
-
-      if (recipients.length > 0) {
-        try {
-          await supabase.from('notifications').insert(
-            recipients.map((recipientId) => ({
-              user_id: recipientId,
-              actor_id: senderId,
-              conversation_id: conversationId,
-              type: 'message',
-              message: 'sent you a message'
-            }))
-          );
-        } catch (notificationError) {
-          console.error('[API] Failed to create message notification:', notificationError);
-        }
+    // 3. Create notifications for recipients
+    if (recipientsList.length > 0) {
+      try {
+        await supabase.from('notifications').insert(
+          recipientsList.map((rId) => ({
+            user_id: rId,
+            actor_id: senderId,
+            conversation_id: conversationId,
+            type: 'message',
+            message: 'sent you a message'
+          }))
+        );
+      } catch (notificationError) {
+        console.error('[API] Failed to create message notification:', notificationError);
       }
     }
 
     return data as unknown as Message;
   },
+
 
   async markConversationMessagesRead(conversationId: string, userId: string): Promise<void> {
     const { error } = await supabase
@@ -1507,6 +1525,19 @@ export const api = {
       .eq('is_read', false);
 
     if (error) throw error;
+
+    // Synchronously clear notifications of type 'message' for this conversation
+    try {
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', userId)
+        .eq('type', 'message')
+        .eq('read', false);
+    } catch (notificationError) {
+      console.error('[API] Failed to mark message notifications as read:', notificationError);
+    }
   },
 
   async searchAll(queryStr: string): Promise<{ products: Product[]; profiles: Profile[]; discussions: Discussion[] }> {
@@ -1560,8 +1591,11 @@ export const api = {
     filter?: string
   ): () => void {
     try {
+      // Append a unique random suffix to prevent channel collisions in rapid page mounts/unmounts or multiple tabs
+      const uniqueChannelName = `${channelName}-${Math.random().toString(36).substring(2, 11)}`;
+
       const subscription = supabase
-        .channel(channelName)
+        .channel(uniqueChannelName)
         .on(
           'postgres_changes',
           {

@@ -24,6 +24,12 @@ const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then(module => 
 const MessagesPage = lazy(() => import('./pages/MessagesPage').then(module => ({ default: module.MessagesPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(module => ({ default: module.NotFoundPage })));
 
+import { supabase } from './lib/supabase';
+
+if (typeof window !== 'undefined') {
+  (window as any).supabase = supabase;
+}
+
 function App() {
   return (
     <ErrorBoundary>

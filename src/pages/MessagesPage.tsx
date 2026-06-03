@@ -33,6 +33,10 @@ export function MessagesPage() {
   const lastSentTypingRef = useRef<number>(0);
   const typingChannelRef = useRef<any>(null);
 
+  // Sync selectedConversation to ref to avoid recreating the global messages subscription
+  const selectedConversationRef = useRef<Conversation | null>(null);
+  selectedConversationRef.current = selectedConversation;
+
   useEffect(() => {
     if (!user) return;
     if (!conversationId) {
@@ -71,9 +75,11 @@ export function MessagesPage() {
         const newMessage = payload.new as Message;
         if (!newMessage) return;
 
+        const activeConversation = selectedConversationRef.current;
+
         if (payload.eventType === 'INSERT') {
           // If the new message is in the currently selected conversation, append it instantly
-          if (selectedConversation && newMessage.conversation_id === selectedConversation.id) {
+          if (activeConversation && newMessage.conversation_id === activeConversation.id) {
             setMessages((currentMessages) => {
               if (currentMessages.some((msg) => msg.id === newMessage.id)) {
                 return currentMessages;
@@ -83,7 +89,7 @@ export function MessagesPage() {
             
             if (newMessage.sender_id !== user.id) {
               try {
-                await api.markConversationMessagesRead(selectedConversation.id, user.id);
+                await api.markConversationMessagesRead(activeConversation.id, user.id);
               } catch (err) {
                 console.error('Error marking message read in subscription:', err);
               }
@@ -100,7 +106,7 @@ export function MessagesPage() {
     return () => {
       globalMessagesUnsubscribe();
     };
-  }, [user, selectedConversation?.id]);
+  }, [user]);
 
   // B. Real-time Typing Indicator Broadcast Channel Subscription
   useEffect(() => {
@@ -224,8 +230,12 @@ export function MessagesPage() {
     setError(null);
 
     try {
-      const sent = await api.sendMessage(selectedConversation.id, user.id, messageText);
+      const recipientId = selectedConversation.conversation_type === 'private' && selectedConversation.partner?.id !== 'unknown'
+        ? selectedConversation.partner?.id
+        : undefined;
+      const sent = await api.sendMessage(selectedConversation.id, user.id, messageText, recipientId);
       setMessages((prev) => (prev.some((message) => message.id === sent.id) ? prev : [...prev, sent]));
+
       setMessageText('');
       await api.markConversationMessagesRead(selectedConversation.id, user.id);
       await fetchConversations(true);
