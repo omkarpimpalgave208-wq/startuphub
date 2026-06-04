@@ -631,8 +631,18 @@ export function ProfilePage() {
 
   return (
     <div className="w-full min-h-screen bg-zinc-50 dark:bg-zinc-900 pb-12">
-      {/* Cover Banner (Full width) */}
-      <div className="relative h-[180px] md:h-80 lg:h-96 w-full overflow-hidden">
+      {/* Cover Banner (Full width breakout) */}
+      <div 
+        className="relative h-[180px] md:h-80 lg:h-96 overflow-hidden"
+        style={{
+          width: '100vw',
+          position: 'relative',
+          left: '50%',
+          right: '50%',
+          marginLeft: '-50vw',
+          marginRight: '-50vw'
+        }}
+      >
         {coverUrl ? (
           <img
             src={coverUrl}
@@ -646,23 +656,25 @@ export function ProfilePage() {
         <div className="absolute inset-0 bg-black/20" />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.3))]" />
         
-        {/* Back Link Overlay on Banner */}
-        <div className="absolute left-4 top-4 z-20">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full bg-black/40 border border-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-black/60 transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to feed
-          </Link>
-        </div>
-
-        <div className="absolute right-3 top-3 md:right-5 md:top-5 flex items-center gap-2 z-20">
-          {isOwnProfile && (
-            <Link to="/settings" className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-md backdrop-blur transition hover:bg-white/20">
-              Change Cover
+        {/* Overlaid Controls aligned to page layout container */}
+        <div className="absolute inset-x-0 top-4 z-20 pointer-events-none">
+          <div className="max-w-6xl mx-auto px-4 md:px-6 w-full flex items-center justify-between pointer-events-auto">
+            {/* Back Arrow link */}
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full bg-black/40 border border-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-black/60 transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to feed
             </Link>
-          )}
+
+            {/* Change Cover button */}
+            {isOwnProfile && (
+              <Link to="/settings" className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-md backdrop-blur transition hover:bg-white/20">
+                Change Cover
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
