@@ -630,54 +630,47 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0 md:py-6">
-      
-      {/* Back feed Link */}
-      <Link
-        to="/"
-        className="hidden md:inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to feed
-      </Link>
-
-      <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-hidden pb-8">
+    <div className="w-full min-h-screen bg-zinc-50 dark:bg-zinc-900 pb-12">
+      {/* Cover Banner (Full width) */}
+      <div className="relative h-[180px] md:h-80 lg:h-96 w-full overflow-hidden">
+        {coverUrl ? (
+          <img
+            src={coverUrl}
+            alt="Profile cover"
+            className="absolute inset-0 h-full w-full object-cover object-center"
+            loading="lazy"
+          />
+        ) : (
+          <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
+        )}
+        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.3))]" />
         
-        {/* Cover Banner */}
-        <div className="relative h-[180px] md:h-80 lg:h-96 w-full overflow-hidden rounded-none md:rounded-t-[2rem]">
-          {coverUrl ? (
-            <div className="absolute inset-0 h-full w-full bg-zinc-950 flex items-center justify-center overflow-hidden">
-              {/* Blurred background image for full coverage */}
-              <img
-                src={coverUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover blur-md opacity-40 scale-105"
-                aria-hidden="true"
-              />
-              {/* Contained full visibility main image */}
-              <img
-                src={coverUrl}
-                alt="Profile cover"
-                className="relative z-10 max-h-full max-w-full object-contain"
-                loading="lazy"
-              />
-            </div>
-          ) : (
-            <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
-          )}
-          <div className="absolute inset-0 bg-black/20" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.3))]" />
-          <div className="absolute right-3 top-3 md:right-5 md:top-5 flex items-center gap-2">
-            {isOwnProfile && (
-              <Link to="/settings" className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-md backdrop-blur transition hover:bg-white/20">
-                Change Cover
-              </Link>
-            )}
-          </div>
+        {/* Back Link Overlay on Banner */}
+        <div className="absolute left-4 top-4 z-20">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-full bg-black/40 border border-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-black/60 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to feed
+          </Link>
         </div>
 
-        {/* Profile Content Area */}
-        <div className="px-2 md:px-8 mt-4">
+        <div className="absolute right-3 top-3 md:right-5 md:top-5 flex items-center gap-2 z-20">
+          {isOwnProfile && (
+            <Link to="/settings" className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-md backdrop-blur transition hover:bg-white/20">
+              Change Cover
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content (Centered layout) */}
+      <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0 relative z-10">
+        <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-hidden pb-8 -mt-10 md:-mt-16">
+          {/* Profile Content Area */}
+          <div className="px-2 md:px-8 mt-4">
           
           {/* Avatar & Edit Button Row */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end -mt-16 md:-mt-24 mb-4 gap-4 relative z-10">
@@ -930,5 +923,6 @@ export function ProfilePage() {
         </div>
       </div>
     </div>
+  </div>
   );
 }
