@@ -145,7 +145,7 @@ export function Layout() {
 
       {/* Main Content Area - padded at bottom on mobile to prevent bottom nav bar overlap */}
       <main className="relative min-h-screen pt-16 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden lg:pl-[260px]">
-        <div className="w-full max-w-none min-w-0 md:max-w-6xl md:mx-auto px-0 md:px-6 py-0 md:py-6">
+        {location.pathname.startsWith('/profile/') ? (
           <Suspense fallback={
             <div className="flex items-center justify-center py-20 w-full min-h-[50vh]">
               <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
@@ -153,7 +153,17 @@ export function Layout() {
           }>
             <Outlet />
           </Suspense>
-        </div>
+        ) : (
+          <div className="w-full max-w-none min-w-0 md:max-w-6xl md:mx-auto px-0 md:px-6 py-0 md:py-6">
+            <Suspense fallback={
+              <div className="flex items-center justify-center py-20 w-full min-h-[50vh]">
+                <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
+              </div>
+            }>
+              <Outlet />
+            </Suspense>
+          </div>
+        )}
       </main>
 
       {/* Instagram-Style mobile bottom navigation bar */}

@@ -631,23 +631,13 @@ export function ProfilePage() {
 
   return (
     <div className="w-full min-h-screen bg-zinc-50 dark:bg-zinc-900 pb-12">
-      {/* Cover Banner (Full width breakout) */}
-      <div 
-        className="relative h-[180px] md:h-80 lg:h-96 overflow-hidden"
-        style={{
-          width: '100vw',
-          position: 'relative',
-          left: '50%',
-          right: '50%',
-          marginLeft: '-50vw',
-          marginRight: '-50vw'
-        }}
-      >
+      {/* Cover Banner (Full width) */}
+      <div className="relative h-[200px] md:h-[260px] w-full overflow-hidden bg-zinc-950">
         {coverUrl ? (
           <img
             src={coverUrl}
             alt="Profile cover"
-            className="absolute inset-0 h-full w-full object-cover object-center"
+            className="absolute inset-0 h-full w-full object-cover object-center block"
             loading="lazy"
           />
         ) : (
