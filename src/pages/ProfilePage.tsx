@@ -646,12 +646,22 @@ export function ProfilePage() {
         {/* Cover Banner */}
         <div className="relative h-[180px] md:h-80 lg:h-96 w-full overflow-hidden rounded-none md:rounded-t-[2rem]">
           {coverUrl ? (
-            <img
-              src={coverUrl}
-              alt="Profile cover"
-              className="absolute inset-0 h-full w-full object-cover"
-              loading="lazy"
-            />
+            <div className="absolute inset-0 h-full w-full bg-zinc-950 flex items-center justify-center overflow-hidden">
+              {/* Blurred background image for full coverage */}
+              <img
+                src={coverUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover blur-md opacity-40 scale-105"
+                aria-hidden="true"
+              />
+              {/* Contained full visibility main image */}
+              <img
+                src={coverUrl}
+                alt="Profile cover"
+                className="relative z-10 max-h-full max-w-full object-contain"
+                loading="lazy"
+              />
+            </div>
           ) : (
             <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
           )}

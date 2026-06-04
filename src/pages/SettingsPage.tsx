@@ -312,15 +312,29 @@ export function SettingsPage() {
             onDrop={onDrop}
           >
             {bannerPreview ? (
-              <img
-                src={bannerPreview}
-                alt="Cover preview"
-                className="mx-auto h-48 w-full rounded-3xl object-cover"
-              />
+              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-950 flex items-center justify-center relative">
+                {/* Blurred background image for full coverage */}
+                <img
+                  src={bannerPreview}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover blur-md opacity-40 scale-105"
+                  aria-hidden="true"
+                />
+                {/* Contained full visibility preview image */}
+                <img
+                  src={bannerPreview}
+                  alt="Cover preview"
+                  className="relative z-10 max-h-full max-w-full object-contain"
+                />
+              </div>
             ) : (
               <div className={`mx-auto h-48 w-full rounded-3xl bg-gradient-to-br ${coverStyles.find((style) => style.id === bannerStyle)?.className ?? coverStyles[0].className}`} />
             )}
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-sm text-zinc-700 dark:text-zinc-300 opacity-90">
+            <div className={`pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-sm opacity-90 ${
+              bannerPreview
+                ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
+                : 'text-zinc-700 dark:text-zinc-300'
+            }`}>
               <p className="font-semibold">Drag & drop a cover image here</p>
               <p>or upload a JPG, PNG, WebP file up to 4MB.</p>
             </div>
