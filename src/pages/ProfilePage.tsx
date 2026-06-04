@@ -668,11 +668,12 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {/* Main Content (Centered layout) */}
-      <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0 relative z-10">
-        <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-hidden pb-8 -mt-10 md:-mt-16">
-          {/* Profile Content Area */}
-          <div className="px-2 md:px-8 mt-4">
+      {/* Main Content (Centered layout with sidebar clearance) */}
+      <div className="w-full lg:pl-[260px] relative z-10">
+        <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0">
+          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-hidden pb-8 -mt-10 md:-mt-16">
+            {/* Profile Content Area */}
+            <div className="px-2 md:px-8 mt-4">
           
           {/* Avatar & Edit Button Row */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end -mt-16 md:-mt-24 mb-4 gap-4 relative z-10">
@@ -926,5 +927,6 @@ export function ProfilePage() {
       </div>
     </div>
   </div>
+</div>
   );
 }

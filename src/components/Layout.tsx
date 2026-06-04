@@ -144,7 +144,9 @@ export function Layout() {
       )}
 
       {/* Main Content Area - padded at bottom on mobile to prevent bottom nav bar overlap */}
-      <main className="relative min-h-screen pt-16 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden lg:pl-[260px]">
+      <main className={`relative min-h-screen pt-16 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden ${
+        location.pathname.startsWith('/profile/') ? 'lg:pl-0' : 'lg:pl-[260px]'
+      }`}>
         {location.pathname.startsWith('/profile/') ? (
           <Suspense fallback={
             <div className="flex items-center justify-center py-20 w-full min-h-[50vh]">
