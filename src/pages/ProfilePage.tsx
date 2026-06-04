@@ -12,7 +12,8 @@ import {
   Layers,
   UserPlus,
   CheckCircle,
-  XCircle
+  XCircle,
+  GraduationCap
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Profile, Product, Bookmark as SavedBookmark, ConnectionRequest, Discussion } from '../types';
@@ -442,6 +443,26 @@ export function ProfilePage() {
                 )}
               </section>
 
+              {/* Education Card */}
+              {profile.college_name && (
+                <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
+                  <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
+                    <GraduationCap className="w-4.5 h-4.5 text-sky-500 flex-shrink-0" />
+                    <h3 className="text-sm font-bold">Education</h3>
+                  </div>
+                  <div>
+                    <h4 className="text-xs md:text-sm font-bold text-zinc-805 dark:text-zinc-200">
+                      {profile.college_name}
+                    </h4>
+                    {profile.studying_year && (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                        Year of study: {profile.studying_year}
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
               {/* Contact Links */}
               <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
                 <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
@@ -490,14 +511,7 @@ export function ProfilePage() {
                       </span>
                     ))
                   ) : (
-                    ['Product Design', 'Venture Strategy', 'React & TypeScript', 'Growth Marketing', 'Founder Operations', 'User Experience'].map((skill) => (
-                      <span
-                        key={skill}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-200/60 dark:border-zinc-850 bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400"
-                      >
-                        {skill}
-                      </span>
-                    ))
+                    <p className="text-xs text-zinc-500">Not added yet</p>
                   )}
                 </div>
               </section>
@@ -515,7 +529,7 @@ export function ProfilePage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-xs text-zinc-500 leading-relaxed">Dedicated startup founder launching and scaling digital ventures, focused on resolving actual market pain points and building sustainable products.</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">Not added yet</p>
                 )}
               </section>
             </div>
@@ -656,42 +670,42 @@ export function ProfilePage() {
         <div className="px-2 md:px-8 mt-4">
           
           {/* Avatar & Edit Button Row */}
-          <div className="flex justify-between items-end -mt-16 md:-mt-24 mb-4 relative z-10">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end -mt-16 md:-mt-24 mb-4 gap-4 relative z-10">
             <div className="relative">
               <div className="w-24 h-24 md:w-32 md:h-32 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-md flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
                 <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
               </div>
             </div>
             {isOwnProfile ? (
-              <Link to="/settings">
-                <Button variant="outline" size="sm" className="text-xs md:text-sm py-1.5 px-4 h-9">
+              <Link to="/settings" className="w-full sm:w-auto">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs md:text-sm py-1.5 px-4 h-9">
                   Edit Profile
                 </Button>
               </Link>
             ) : user ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <Button
                   variant={isFollowing ? 'outline' : 'primary'}
                   size="sm"
-                  className="text-xs md:text-sm py-1.5 px-4 h-9"
+                  className="flex-1 sm:flex-initial text-xs md:text-sm py-1.5 px-4 h-9"
                   loading={followLoading}
                   onClick={handleFollow}
                 >
                   {isFollowing ? 'Following' : 'Follow'}
                 </Button>
                 {connectionState === 'request_received' ? (
-                  <div className="flex gap-2">
-                    <Button size="sm" className="text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleAcceptConnectionRequest}>Accept</Button>
-                    <Button size="sm" variant="outline" className="text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleRejectConnectionRequest}>Reject</Button>
+                  <div className="flex gap-2 flex-1 sm:flex-initial">
+                    <Button size="sm" className="flex-1 sm:flex-initial text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleAcceptConnectionRequest}>Accept</Button>
+                    <Button size="sm" variant="outline" className="flex-1 sm:flex-initial text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleRejectConnectionRequest}>Reject</Button>
                   </div>
                 ) : connectionState === 'connected' ? (
-                  <Button size="sm" variant="outline" className="text-xs py-1.5 px-3 h-9" disabled>Connected</Button>
+                  <Button size="sm" variant="outline" className="flex-1 sm:flex-initial text-xs py-1.5 px-3 h-9" disabled>Connected</Button>
                 ) : connectionState === 'request_sent' ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20">Pending</span>
+                  <span className="inline-flex items-center justify-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 flex-1 sm:flex-initial">Pending</span>
                 ) : (
-                  <Button size="sm" variant="secondary" className="text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleConnect}>Connect</Button>
+                  <Button size="sm" variant="secondary" className="flex-1 sm:flex-initial text-xs py-1.5 px-3 h-9" loading={connectLoading} onClick={handleConnect}>Connect</Button>
                 )}
-                <Button size="sm" variant="secondary" className="text-xs py-1.5 px-3 h-9" loading={messageLoading} onClick={handleOpenConversation}>Message</Button>
+                <Button size="sm" variant="secondary" className="flex-1 sm:flex-initial text-xs py-1.5 px-3 h-9" loading={messageLoading} onClick={handleOpenConversation}>Message</Button>
               </div>
             ) : null}
           </div>
@@ -719,6 +733,15 @@ export function ProfilePage() {
                 </div>
               </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">@{profile.username}</p>
+              {profile.college_name && (
+                <div className="flex items-center gap-1.5 text-xs text-zinc-650 dark:text-zinc-400 mt-1.5">
+                  <GraduationCap className="w-4 h-4 text-zinc-400 dark:text-zinc-500 flex-shrink-0" />
+                  <span>
+                    Studying at <span className="font-semibold text-zinc-800 dark:text-zinc-200">{profile.college_name}</span>
+                    {profile.studying_year ? ` (${profile.studying_year})` : ''}
+                  </span>
+                </div>
+              )}
             </div>
 
             {profile.headline && (
@@ -827,7 +850,7 @@ export function ProfilePage() {
                       <span className="text-xl font-bold text-zinc-400">{products[0].name[0]}</span>
                     )}
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-base font-bold text-zinc-900 dark:text-white leading-tight">{products[0].name}</h3>
                       <span className="text-[10px] px-2 py-0.5 rounded-full border border-orange-200 bg-orange-50 font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 uppercase tracking-wider">{products[0].category}</span>

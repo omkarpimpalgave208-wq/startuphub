@@ -202,14 +202,16 @@ export function ConnectionsPage() {
           ) : (
             <div className="space-y-4">
               {sent.map((request) => (
-                <div key={request.id} className="flex items-center gap-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-5">
-                  <Avatar src={request.receiver?.avatar_url} alt={request.receiver?.full_name || request.receiver?.username} size="md" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-zinc-900 dark:text-white">{request.receiver?.full_name || request.receiver?.username}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">@{request.receiver?.username}</p>
-                    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Pending request sent on {new Date(request.created_at).toLocaleDateString()}</p>
+                <div key={request.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-5 w-full">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <Avatar src={request.receiver?.avatar_url} alt={request.receiver?.full_name || request.receiver?.username} size="md" className="flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-zinc-900 dark:text-white truncate">{request.receiver?.full_name || request.receiver?.username}</p>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">@{request.receiver?.username}</p>
+                      <p className="mt-1 text-sm text-zinc-650 dark:text-zinc-400 line-clamp-1">Pending request sent on {new Date(request.created_at).toLocaleDateString()}</p>
+                    </div>
                   </div>
-                  <div className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-orange-700">
+                  <div className="rounded-full bg-orange-100 dark:bg-orange-950/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-orange-700 dark:text-orange-300 w-fit sm:w-auto self-start sm:self-auto flex-shrink-0">
                     Pending
                   </div>
                 </div>

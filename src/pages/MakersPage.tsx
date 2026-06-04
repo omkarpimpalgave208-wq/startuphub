@@ -57,8 +57,8 @@ export function MakersPage() {
                     <Avatar
                       src={maker.avatar_url}
                       alt={maker.full_name || maker.username}
-                      size="xl"
-                      className="flex-shrink-0"
+                      size="lg"
+                      className="flex-shrink-0 sm:w-20 sm:h-20 sm:min-w-[80px] sm:min-h-[80px]"
                     />
                     <div className="flex-1 min-w-0 flex flex-col justify-between h-full min-h-[64px]">
                       <div>

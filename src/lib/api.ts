@@ -842,6 +842,8 @@ export const api = {
     const skills = Array.isArray(data.skills) ? data.skills : [];
     const achievements = Array.isArray(data.achievements) ? data.achievements : [];
     const experience = Array.isArray(data.experience) ? data.experience : [];
+    const college_name = (data.college_name as string | null) || null;
+    const studying_year = (data.studying_year as string | null) || null;
 
     const products = Array.isArray(data.products) && data.products.length > 0
       ? ((data.products[0] as Record<string, unknown>).count as number) || 0
@@ -865,6 +867,8 @@ export const api = {
       skills,
       achievements,
       experience,
+      college_name,
+      studying_year,
       products,
       followers,
       following,

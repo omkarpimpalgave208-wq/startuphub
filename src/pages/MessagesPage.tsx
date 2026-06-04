@@ -75,6 +75,8 @@ export function MessagesPage() {
   useEffect(() => {
     if (conversationId) {
       openConversation(conversationId);
+    } else {
+      setSelectedConversation(null);
     }
   }, [conversationId, user]);
 
@@ -355,7 +357,7 @@ export function MessagesPage() {
     try {
       const data = await api.getConversationsForUser(user.id);
       setConversations(data);
-      if (!conversationId && data.length > 0) {
+      if (!conversationId && data.length > 0 && window.innerWidth >= 1024) {
         navigate(`/messages/${data[0].id}`, { replace: true });
       }
     } catch (err) {
@@ -531,7 +533,7 @@ export function MessagesPage() {
                     setSelectedConversation(null);
                     navigate('/messages');
                   }}
-                  className="inline-flex items-center justify-center p-1 -ml-1 text-zinc-700 dark:text-zinc-200 hover:text-orange-500 transition"
+                  className="inline-flex lg:hidden items-center justify-center p-1 -ml-1 text-zinc-700 dark:text-zinc-200 hover:text-orange-500 transition"
                   aria-label="Back to messages"
                 >
                   <ArrowLeft className="w-6 h-6" />

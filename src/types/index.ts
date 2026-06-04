@@ -21,6 +21,8 @@ export interface Profile {
     period: string;
     description: string;
   }>;
+  college_name?: string | null;
+  studying_year?: string | null;
   products?: number;
   followers?: number;
   following?: number;

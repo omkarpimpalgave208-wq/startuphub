@@ -35,7 +35,11 @@ export function SettingsPage() {
     website: '',
     github_url: '',
     twitter_url: '',
-    linkedin_url: ''
+    linkedin_url: '',
+    college_name: '',
+    studying_year: '',
+    skills: '',
+    achievements: ''
   });
 
   useEffect(() => {
@@ -48,7 +52,11 @@ export function SettingsPage() {
         website: profile.website || '',
         github_url: profile.github_url || '',
         twitter_url: profile.twitter_url || '',
-        linkedin_url: profile.linkedin_url || ''
+        linkedin_url: profile.linkedin_url || '',
+        college_name: profile.college_name || '',
+        studying_year: profile.studying_year || '',
+        skills: (profile.skills || []).join(', '),
+        achievements: (profile.achievements || []).join('\n')
       });
       if (profile.avatar_url) {
         setAvatarPreview(profile.avatar_url);
@@ -208,7 +216,29 @@ export function SettingsPage() {
 
     setSaving(true);
     try {
-      await api.updateProfile(user.id, formData);
+      const skillsArray = formData.skills
+        ? formData.skills.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+      const achievementsArray = formData.achievements
+        ? formData.achievements.split('\n').map((a) => a.trim()).filter(Boolean)
+        : [];
+
+      const payload = {
+        username: formData.username,
+        full_name: formData.full_name,
+        headline: formData.headline,
+        bio: formData.bio,
+        website: formData.website,
+        github_url: formData.github_url,
+        twitter_url: formData.twitter_url,
+        linkedin_url: formData.linkedin_url,
+        college_name: formData.college_name,
+        studying_year: formData.studying_year,
+        skills: skillsArray,
+        achievements: achievementsArray
+      };
+
+      await api.updateProfile(user.id, payload as any);
       await fetchProfile(user.id);
     } catch (err) {
       console.error('Save settings error:', err);
@@ -347,6 +377,21 @@ export function SettingsPage() {
             />
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="College Name"
+              value={formData.college_name}
+              onChange={(e) => setFormData({ ...formData, college_name: e.target.value })}
+              placeholder="e.g. Stanford University"
+            />
+            <Input
+              label="Year of Study"
+              value={formData.studying_year}
+              onChange={(e) => setFormData({ ...formData, studying_year: e.target.value })}
+              placeholder="e.g. 3rd Year"
+            />
+          </div>
+
           <Input
             label="Headline"
             value={formData.headline}
@@ -360,6 +405,23 @@ export function SettingsPage() {
             onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
             placeholder="Tell us about yourself..."
             rows={4}
+          />
+
+          <Input
+            label="Skills & Expertise"
+            value={formData.skills}
+            onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
+            placeholder="e.g. React, TypeScript, Product Design (comma separated)"
+            helperText="Separate multiple skills with commas"
+          />
+
+          <Textarea
+            label="Achievements & Focus"
+            value={formData.achievements}
+            onChange={(e) => setFormData({ ...formData, achievements: e.target.value })}
+            placeholder="e.g. Winner of Startup Hackathon 2026&#10;Launched 2 apps on Play Store (new line separated)"
+            rows={3}
+            helperText="Separate multiple achievements with new lines"
           />
 
           <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">

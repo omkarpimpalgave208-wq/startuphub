@@ -167,7 +167,7 @@ export function Navbar() {
               {/* Mobile search */}
               <button
                 onClick={() => setSearchOpen(true)}
-                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 md:hidden flex-shrink-0"
+                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hidden sm:block md:hidden flex-shrink-0"
                 aria-label="Search"
               >
                 <Search className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
@@ -202,7 +202,7 @@ export function Navbar() {
                   {/* Notifications */}
                   <button
                     onClick={() => navigate('/messages')}
-                    className="relative p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
+                    className="relative p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hidden sm:flex flex-shrink-0"
                     aria-label="Messages"
                   >
                     <MessageSquare className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
