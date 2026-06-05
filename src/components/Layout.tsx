@@ -124,7 +124,7 @@ export function Layout() {
       </div>
 
       {/* Desktop Sidebar - always visible on lg+ */}
-      <aside className="fixed left-0 top-16 bottom-0 z-30 hidden lg:block w-[260px]">
+      <aside className="fixed left-0 top-14 bottom-0 z-30 hidden lg:block w-[260px]">
         <Sidebar />
       </aside>
 
@@ -137,14 +137,14 @@ export function Layout() {
             onClick={handleOverlayClick}
           />
           {/* Drawer */}
-          <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] bg-white dark:bg-zinc-950 shadow-2xl pt-16 animate-slide-in">
+          <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] bg-white dark:bg-zinc-950 shadow-2xl pt-12 sm:pt-14 animate-slide-in">
             <Sidebar />
           </aside>
         </div>
       )}
 
       {/* Main Content Area - padded at bottom on mobile to prevent bottom nav bar overlap */}
-      <main className={`relative min-h-screen pt-16 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden ${
+      <main className={`relative min-h-screen pt-12 sm:pt-14 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden ${
         location.pathname.startsWith('/profile/') ? 'lg:pl-0' : 'lg:pl-[260px]'
       }`}>
         {location.pathname.startsWith('/profile/') ? (

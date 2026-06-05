@@ -131,9 +131,9 @@ export function Navbar() {
     <>
       <nav className="fixed top-0 left-0 right-0 z-40 w-full bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800">
         <div className="w-full px-3 sm:px-4 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16 w-full">
+          <div className="flex items-center justify-between h-12 sm:h-14 w-full">
             {/* Left side */}
-            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
               {/* Hamburger - visible only on desktop */}
               <button
                 onClick={handleToggleSidebar}
@@ -152,7 +152,7 @@ export function Navbar() {
             <div className="flex-1 min-w-0 max-w-xl mx-2 sm:mx-4 hidden md:block">
               <button
                 onClick={() => setSearchOpen(true)}
-                className="w-full flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                className="w-full flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
               >
                 <Search className="w-4 h-4 flex-shrink-0" />
                 <span className="text-sm truncate">Search products, makers...</span>
@@ -163,7 +163,7 @@ export function Navbar() {
             </div>
 
             {/* Right side */}
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
               {/* Mobile search */}
               <button
                 onClick={() => setSearchOpen(true)}

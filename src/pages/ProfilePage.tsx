@@ -53,6 +53,7 @@ export function ProfilePage() {
   const [coverUrl, setCoverUrl] = useState('');
   const [coverStyle, setCoverStyle] = useState('gradient-1');
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -286,6 +287,33 @@ export function ProfilePage() {
     }
   };
 
+  const handleShareProfile = () => {
+    const shareUrl = window.location.href;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      }).catch((err) => {
+        console.error('Failed to copy text: ', err);
+      });
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = shareUrl;
+      textArea.style.position = 'fixed';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
   const handleAcceptConnectionRequest = async () => {
     if (!user || !connectionRequestId) return;
 
@@ -388,7 +416,7 @@ export function ProfilePage() {
   return (
     <div className="w-full min-h-screen bg-zinc-50 dark:bg-zinc-900 pb-12">
       {/* Cover Banner (Full width) */}
-      <div className="relative h-[140px] sm:h-[200px] md:h-[280px] lg:h-[350px] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
+      <div className="relative h-[180px] sm:h-[220px] md:h-[280px] lg:h-[340px] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
         {coverUrl ? (
           <>
             {/* Blurred background layer under the cover to improve aesthetics */}
@@ -402,32 +430,36 @@ export function ProfilePage() {
             <img
               src={coverUrl}
               alt="Profile cover"
-              className="relative z-10 h-full w-full object-contain block mx-auto"
+              className="relative z-20 h-full w-full object-contain block mx-auto"
               loading="lazy"
             />
           </>
         ) : (
           <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
         )}
-        <div className="absolute inset-0 bg-black/20" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.3))]" />
+        {/* Dark overlay for cover image readability */}
+        <div className="absolute inset-0 bg-black/35 backdrop-brightness-75 z-10" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.3))] z-10" />
         
-        {/* Overlaid Controls aligned to page layout container */}
-        <div className="absolute inset-x-0 top-4 z-20 pointer-events-none">
+        {/* Overlaid Controls (Floating) */}
+        <div className="absolute inset-x-0 top-4 z-30 pointer-events-none">
           <div className="max-w-6xl mx-auto px-4 md:px-6 w-full flex items-center justify-between pointer-events-auto">
             {/* Back Arrow link */}
             <Link
               to="/"
-              className="inline-flex items-center gap-2 rounded-full bg-black/40 border border-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-black/60 transition"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/55 border border-white/10 text-white backdrop-blur-md hover:bg-black/75 active:scale-95 transition-all shadow-lg"
+              aria-label="Back to feed"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to feed
             </Link>
 
             {/* Change Cover button */}
             {isOwnProfile && (
-              <Link to="/settings" className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-md backdrop-blur transition hover:bg-white/20">
-                Change Cover
+              <Link
+                to="/settings"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-black/75 active:scale-95 transition-all shadow-lg"
+              >
+                <span>Edit Cover</span>
               </Link>
             )}
           </div>
@@ -437,32 +469,41 @@ export function ProfilePage() {
       {/* Main Content (Centered layout with sidebar clearance) */}
       <div className="w-full lg:pl-[260px] relative z-10">
         <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0">
-          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-visible pb-8 -mt-6 sm:-mt-10 md:-mt-16 lg:-mt-20">
+          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-visible pb-8 -mt-8 sm:-mt-12 md:-mt-16 lg:-mt-20">
             
             {/* Profile Content Area */}
             <div className="px-2 md:px-8 mt-4">
               
               {/* Avatar & Edit Button Row */}
-              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-10 sm:-mt-14 md:-mt-20 lg:-mt-24 mb-3 gap-5 relative z-10 px-4 md:px-8">
+              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-12 sm:-mt-16 md:-mt-20 lg:-mt-24 mb-4 gap-4 relative z-10 px-4 md:px-8">
                 <div className="relative mx-auto sm:mx-0">
-                  <div className="w-28 h-28 md:w-36 md:h-36 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-xl flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
+                  <div className="w-[100px] h-[100px] sm:w-32 sm:h-32 md:w-36 md:h-36 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-xl flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
                     <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
                   </div>
                 </div>
                 
                 {/* Action Buttons (Right-aligned next to avatar on desktop) */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full sm:w-auto">
                   {isOwnProfile ? (
-                    <Link to="/settings" className="w-full sm:w-auto">
-                      <Button variant="outline" className="w-full sm:w-auto text-xs font-bold py-2 px-5 h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl transition-all shadow-sm">
-                        Edit Profile
+                    <div className="flex gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                      <Link to="/settings" className="flex-1 sm:flex-initial">
+                        <Button variant="outline" className="w-full text-xs font-bold py-2 px-4 h-9 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl transition-all shadow-sm">
+                          Edit Profile
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="secondary"
+                        onClick={handleShareProfile}
+                        className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-805 dark:text-zinc-200 rounded-xl transition-all shadow-sm"
+                      >
+                        {shareCopied ? 'Copied!' : 'Share Profile'}
                       </Button>
-                    </Link>
+                    </div>
                   ) : (
-                    <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full sm:w-auto">
                       <Button
                         variant={isFollowing ? 'outline' : 'primary'}
-                        className={`flex-1 sm:flex-initial text-xs font-bold py-2 px-5 h-10 rounded-xl transition-all shadow-sm ${
+                        className={`flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 rounded-xl transition-all shadow-sm ${
                           isFollowing ? 'border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300' : 'bg-orange-500 hover:bg-orange-600 text-white border-0'
                         }`}
                         loading={followLoading}
@@ -473,28 +514,28 @@ export function ProfilePage() {
                       
                       {connectionState === 'request_received' ? (
                         <div className="flex gap-2 flex-1 sm:flex-initial">
-                          <Button className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
+                          <Button className="flex-1 sm:flex-initial text-xs font-bold py-2 px-3 h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
                             Accept
                           </Button>
-                          <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-10 border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm" loading={connectLoading} onClick={handleRejectConnectionRequest}>
+                          <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-3 h-9 border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm" loading={connectLoading} onClick={handleRejectConnectionRequest}>
                             Reject
                           </Button>
                         </div>
                       ) : connectionState === 'connected' ? (
-                        <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-10 border-zinc-200 dark:border-zinc-800 text-zinc-500 rounded-xl shadow-sm cursor-not-allowed" disabled>
+                        <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 border-zinc-200 dark:border-zinc-800 text-zinc-500 rounded-xl shadow-sm cursor-not-allowed" disabled>
                           Connected
                         </Button>
                       ) : connectionState === 'request_sent' ? (
-                        <span className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 flex-1 sm:flex-initial h-10">
+                        <span className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 flex-1 sm:flex-initial h-9">
                           Pending
                         </span>
                       ) : (
-                        <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-10 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-850 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={connectLoading} onClick={handleConnect}>
+                        <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-850 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={connectLoading} onClick={handleConnect}>
                           Connect
                         </Button>
                       )}
                       
-                      <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-10 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-850 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={messageLoading} onClick={handleOpenConversation}>
+                      <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-855 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={messageLoading} onClick={handleOpenConversation}>
                         Message
                       </Button>
                     </div>
@@ -503,37 +544,37 @@ export function ProfilePage() {
               </div>
 
               {/* Header Info */}
-              <div className="px-4 md:px-8 space-y-4 pt-1 sm:pt-0 text-center sm:text-left flex flex-col items-center sm:items-start">
+              <div className="px-4 md:px-8 space-y-3 pt-1 sm:pt-0 text-center sm:text-left flex flex-col items-center sm:items-start">
                 {/* Name & Badge Row */}
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-                    <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white leading-tight">
-                      {profile.full_name || profile.username}
-                    </h1>
+                <div className="space-y-1.5 flex flex-col items-center sm:items-start">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight leading-tight">
+                    {profile.full_name || profile.username}
+                  </h1>
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-0.5">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
                       Founder
                     </span>
                     
                     {/* Online Status Badge */}
-                    <div className="flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-zinc-50/50 px-2.5 py-0.5 text-[10px] dark:border-zinc-800/80 dark:bg-zinc-900/50">
+                    <div className="flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 px-2.5 py-0.5 text-[10px] dark:bg-zinc-900/50">
                       <span className="relative flex h-1.5 w-1.5">
                         {isUserOnline(profile.last_seen) && (
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                         )}
                         <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${isUserOnline(profile.last_seen) ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
                       </span>
-                      <span className="font-semibold text-zinc-500 dark:text-zinc-400">
+                      <span className="font-semibold text-zinc-550 dark:text-zinc-400">
                         {isUserOnline(profile.last_seen) ? 'Active now' : formatLastSeen(profile.last_seen)}
                       </span>
                     </div>
                   </div>
                   
-                  <p className="text-xs md:text-sm font-semibold text-zinc-400 dark:text-zinc-500">@{profile.username}</p>
+                  <p className="text-xs sm:text-sm font-semibold text-zinc-400 dark:text-zinc-500">@{profile.username}</p>
                 </div>
 
                 {/* Bio / Tagline */}
                 {(profile.headline || profile.bio) && (
-                  <p className="text-sm md:text-base text-zinc-650 dark:text-zinc-350 leading-relaxed font-normal max-w-3xl">
+                  <p className="text-sm sm:text-base text-zinc-605 dark:text-zinc-400 leading-relaxed font-normal max-w-2xl text-center sm:text-left">
                     {profile.headline || (profile.bio ? (profile.bio.length > 160 ? profile.bio.slice(0, 160) + '...' : profile.bio) : '')}
                   </p>
                 )}
@@ -547,7 +588,7 @@ export function ProfilePage() {
                   if (!showJoinDate && !showProductCount && !showActive) return null;
                   
                   return (
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3.5 w-full">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3 w-full">
                       {showJoinDate && (
                         <span className="inline-flex items-center gap-1.5">
                           <span className="text-sm">🚀</span>
@@ -577,33 +618,50 @@ export function ProfilePage() {
                   );
                 })()}
 
-                {/* Premium Stats Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 w-full">
-                  {[
-                    { label: 'Products', value: products.length || profile.products || 0, id: 'products-section' },
-                    { label: 'Followers', value: profile.followers || 0, id: 'about-section' },
-                    { label: 'Following', value: profile.following || 0, id: 'about-section' },
-                    { label: 'Connections', value: profile.connections || 0, id: 'connection-requests-section' }
-                  ].map((stat) => (
-                    <div
-                      key={stat.label}
-                      onClick={() => {
-                        const targetElement = document.getElementById(stat.id);
-                        if (targetElement) {
-                          targetElement.scrollIntoView({ behavior: 'smooth' });
-                        }
-                      }}
-                      className="flex flex-col items-center justify-center text-center sm:items-start sm:text-left p-4 rounded-2xl border border-zinc-100 dark:border-zinc-900 bg-zinc-50/40 dark:bg-zinc-950/20 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 hover:border-orange-500/20 hover:shadow-md transition-all duration-200 cursor-pointer group w-full"
-                    >
-                      <span className="text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight group-hover:text-orange-500 transition-colors">
-                        {stat.value}
-                      </span>
-                      <span className="text-[10px] md:text-xs font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wider mt-1">
-                        {stat.label}
-                      </span>
+                {/* Redesigned Premium Stats Cards */}
+                {(() => {
+                  const totalUpvotes = products.reduce((acc, p) => acc + (p.upvote_count || 0), 0);
+                  let reputation = 'New';
+                  if (totalUpvotes >= 50) {
+                    reputation = 'Elite';
+                  } else if (totalUpvotes >= 10 || products.length > 1) {
+                    reputation = 'Rising Star';
+                  } else if (products.length > 0 || (profile.connections || 0) > 2) {
+                    reputation = 'Active';
+                  }
+
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 w-full">
+                      {[
+                        { label: 'Products', value: products.length || 0, icon: '🚀', id: 'products-section' },
+                        { label: 'Connections', value: profile.connections || 0, icon: '🤝', id: 'connection-requests-section' },
+                        { label: 'Posts', value: discussions.length || 0, icon: '📝', id: 'timeline-section' },
+                        { label: 'Reputation', value: reputation, icon: '⭐', id: 'about-section' }
+                      ].map((stat) => (
+                        <div
+                          key={stat.label}
+                          onClick={() => {
+                            const targetId = stat.label === 'Posts' ? 'timeline-section' : stat.id;
+                            const targetElement = document.getElementById(targetId);
+                            if (targetElement) {
+                              targetElement.scrollIntoView({ behavior: 'smooth' });
+                            }
+                          }}
+                          className="flex flex-col items-center justify-center text-center p-4 rounded-2xl border border-zinc-150 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm hover:shadow-md hover:border-orange-500/30 dark:hover:border-orange-500/25 transition-all duration-200 cursor-pointer group w-full relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-br from-zinc-500/5 to-transparent rounded-bl-full pointer-events-none" />
+                          <span className="text-lg mb-1">{stat.icon}</span>
+                          <span className="text-[10px] sm:text-xs font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wider">
+                            {stat.label}
+                          </span>
+                          <span className="text-lg sm:text-xl font-black text-zinc-900 dark:text-white mt-0.5 group-hover:text-orange-500 transition-colors">
+                            {stat.value}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
 
                 {/* Social Links as modern pills */}
                 {profileLinks.length > 0 && (
@@ -633,49 +691,63 @@ export function ProfilePage() {
                 </div>
               )}
 
-              {/* Connection requests section */}
-              {isOwnProfile && incomingRequests.length > 0 && (
-                <div id="connection-requests-section" className="mx-4 md:mx-8 mt-6 rounded-2xl border border-orange-200 dark:border-orange-900/50 bg-orange-50/10 dark:bg-orange-950/10 overflow-hidden text-left">
-                  <div className="px-4 py-3 border-b border-orange-200 dark:border-orange-900/50 flex items-center justify-between">
+              {/* Connection requests section with clean empty states */}
+              {isOwnProfile && (
+                <div id="connection-requests-section" className="mx-4 md:mx-8 mt-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/10 dark:bg-zinc-950/10 overflow-hidden text-left shadow-sm">
+                  <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Connection requests</p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Connection requests</p>
                       <p className="text-xs text-zinc-500 mt-0.5">Respond to founders who want to connect with you.</p>
                     </div>
-                    <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs text-white font-bold">{incomingRequests.length}</span>
+                    {incomingRequests.length > 0 && (
+                      <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs text-white font-bold">{incomingRequests.length}</span>
+                    )}
                   </div>
-                  <div className="divide-y divide-orange-100 dark:divide-orange-900/40">
-                    {incomingRequests.map((request) => (
-                      <div key={request.id} className="flex items-center justify-between p-3.5 gap-3">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar src={request.sender?.avatar_url || ''} alt={request.sender?.full_name || request.sender?.username} size="xs" />
-                          <div>
-                            <p className="text-xs font-bold text-zinc-900 dark:text-white">{request.sender?.full_name || request.sender?.username}</p>
-                            <p className="text-[10px] text-zinc-500">@{request.sender?.username}</p>
+                  {incomingRequests.length > 0 ? (
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-900">
+                      {incomingRequests.map((request) => (
+                        <div key={request.id} className="flex items-center justify-between p-3.5 gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar src={request.sender?.avatar_url || ''} alt={request.sender?.full_name || request.sender?.username} size="xs" />
+                            <div>
+                              <p className="text-xs font-bold text-zinc-900 dark:text-white">{request.sender?.full_name || request.sender?.username}</p>
+                              <p className="text-[10px] text-zinc-500">@{request.sender?.username}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" className="text-xs py-1 px-3 h-8 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleAcceptConnectionRequest(); }}>Accept</Button>
+                            <Button size="sm" variant="outline" className="text-xs py-1 px-3 h-8 border-zinc-200 dark:border-zinc-800 text-zinc-650 rounded-lg transition" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleRejectConnectionRequest(); }}>Reject</Button>
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" className="text-xs py-1 px-3 h-8 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleAcceptConnectionRequest(); }}>Accept</Button>
-                          <Button size="sm" variant="outline" className="text-xs py-1 px-3 h-8 border-zinc-200 dark:border-zinc-800 text-zinc-650 rounded-lg transition" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleRejectConnectionRequest(); }}>Reject</Button>
-                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-6 text-center flex flex-col items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-400 flex items-center justify-center mb-2">
+                        <CheckCircle className="w-4 h-4" />
                       </div>
-                    ))}
-                  </div>
+                      <p className="text-xs text-zinc-500 font-medium">You're all caught up! No pending connection requests.</p>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Startup Spotlight Section */}
+              {/* Currently Building Spotlight Section */}
               {products.length > 0 ? (
-                <div className="mx-4 md:mx-8 mt-8 p-6 border border-orange-500/20 bg-gradient-to-br from-orange-50/40 via-white to-zinc-50/30 dark:from-orange-950/10 dark:via-zinc-950 dark:to-zinc-950/50 rounded-2xl shadow-sm text-left relative overflow-hidden group">
+                <div className="mx-4 md:mx-8 mt-6 p-5 border border-orange-500/20 bg-gradient-to-br from-orange-50/40 via-white to-zinc-50/30 dark:from-orange-950/10 dark:via-zinc-950 dark:to-zinc-950/50 rounded-2xl shadow-sm text-left relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-bl-full blur-xl pointer-events-none" />
                   
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-orange-500 mb-4">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Startup Spotlight
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-orange-500 mb-3.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
+                    </span>
+                    Currently Building
                   </div>
                   
                   <div className="flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
                     <div className="flex gap-4.5 items-start flex-1 min-w-0">
-                      <div className="w-16 h-16 rounded-2xl overflow-hidden bg-zinc-105 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex-shrink-0 flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform duration-300">
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex-shrink-0 flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform duration-300">
                         {products[0].logo_url ? (
                           <img src={products[0].logo_url} alt={products[0].name} className="w-full h-full object-cover" />
                         ) : (
@@ -691,7 +763,7 @@ export function ProfilePage() {
                         <p className="text-xs text-zinc-550 dark:text-zinc-400 line-clamp-2 leading-relaxed">{products[0].description}</p>
                         
                         {/* Spotlight Metadata Row */}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-455 dark:text-zinc-500 pt-1.5 font-medium">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-400 dark:text-zinc-500 pt-1.5 font-medium">
                           <span>Launched {new Date(products[0].created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
                           <span>&bull;</span>
                           <span className="font-semibold text-zinc-650 dark:text-zinc-400">{products[0].upvote_count || 0} Upvotes</span>
@@ -707,7 +779,7 @@ export function ProfilePage() {
                             href={products[0].website_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-805 bg-white dark:bg-zinc-950 text-xs font-bold text-zinc-750 dark:text-zinc-300 hover:border-orange-500 hover:text-orange-500 transition-colors shadow-sm"
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs font-bold text-zinc-750 dark:text-zinc-300 hover:border-orange-500 hover:text-orange-550 transition-colors shadow-sm"
                           >
                             <span>Visit Site</span>
                             <Globe className="w-3.5 h-3.5" />
@@ -715,7 +787,7 @@ export function ProfilePage() {
                         )}
                         <Link
                           to={`/product/${products[0].id}`}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-905 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-xs font-bold text-white dark:text-zinc-900 transition-colors shadow-sm"
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-xs font-bold text-white dark:text-zinc-900 transition-colors shadow-sm"
                         >
                           <span>View Details</span>
                         </Link>
@@ -724,18 +796,18 @@ export function ProfilePage() {
                   </div>
                 </div>
               ) : isOwnProfile ? (
-                <div className="mx-4 md:mx-8 mt-8 p-6 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/30 text-center">
-                  <Sparkles className="w-6 h-6 text-orange-400 mx-auto mb-2" />
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white">Feature Your Startup Spotlight</h4>
-                  <p className="text-[11px] text-zinc-500 mt-1 max-w-sm mx-auto">Launch a product on StartupHub to prominently feature your startup at the top of your portfolio!</p>
-                  <Link to="/launch" className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-orange-500 hover:text-orange-600">
-                    Launch Startup now &rarr;
+                <div className="mx-4 md:mx-8 mt-6 p-6 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/30 dark:bg-zinc-950/20 text-center flex flex-col items-center justify-center shadow-sm">
+                  <Sparkles className="w-6 h-6 text-orange-400 mb-2" />
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white">Feature Your Startup</h4>
+                  <p className="text-[11px] text-zinc-550 dark:text-zinc-450 mt-1 max-w-sm mx-auto">Launch a product on StartupHub to feature it prominently here as currently building!</p>
+                  <Link to="/launch" className="mt-3.5 inline-flex items-center gap-1 text-[11px] font-bold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-xl shadow-sm transition">
+                    Launch Startup &rarr;
                   </Link>
                 </div>
               ) : null}
 
               {/* About Section */}
-              <section id="about-section" className="px-4 md:px-8 pt-8 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-8">
+              <section id="about-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
                 <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                   <Briefcase className="w-5 h-5 text-orange-500 flex-shrink-0" />
                   <h2 className="text-lg font-bold tracking-tight">About the Founder</h2>
@@ -767,7 +839,7 @@ export function ProfilePage() {
 
               {/* Skills & Achievements Section */}
               {((profile.skills && profile.skills.length > 0) || (profile.achievements && profile.achievements.length > 0)) && (
-                <section className="px-4 md:px-8 pt-8 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-8">
+                <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
                   <div className="grid gap-6 md:grid-cols-2">
                     {/* Skills Column */}
                     {profile.skills && profile.skills.length > 0 && (
@@ -780,7 +852,7 @@ export function ProfilePage() {
                           {profile.skills.map((skill) => (
                             <span
                               key={skill}
-                              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 text-zinc-750 dark:text-zinc-300 hover:border-orange-500/30 hover:text-orange-500 transition-colors shadow-sm"
+                              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 text-zinc-750 dark:text-zinc-305 hover:border-orange-500/30 hover:text-orange-500 transition-colors shadow-sm"
                             >
                               {skill}
                             </span>
@@ -813,9 +885,9 @@ export function ProfilePage() {
                 </section>
               )}
 
-              {/* Recent Products Grid */}
-              <section id="products-section" className="px-4 md:px-8 pt-8 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-8">
-                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-6">
+              {/* Recent Products Grid with polished Empty State */}
+              <section id="products-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                   <Layers className="w-5 h-5 text-orange-500 flex-shrink-0" />
                   <h2 className="text-lg font-bold tracking-tight">Recent Startups & Products</h2>
                 </div>
@@ -827,20 +899,29 @@ export function ProfilePage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/20 p-8 text-center">
-                    <p className="text-sm text-zinc-500">
+                  <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-950/20 p-8 text-center flex flex-col items-center justify-center shadow-sm">
+                    <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-950/40 text-orange-500 flex items-center justify-center mb-3">
+                      <Layers className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1">No Startups Launched</h4>
+                    <p className="text-xs text-zinc-500 max-w-xs">
                       {isOwnProfile
-                        ? "You haven't launched any products yet. Create one from the launch page to showcase it here."
+                        ? "You haven't launched any products yet. Launch your first product on StartupHub to showcase it here."
                         : 'This founder has not launched any products yet.'}
                     </p>
+                    {isOwnProfile && (
+                      <Link to="/launch" className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-xs font-bold text-white rounded-xl transition shadow-sm">
+                        Launch Startup &rarr;
+                      </Link>
+                    )}
                   </div>
                 )}
               </section>
 
-              {/* Saved Startups Section (Private, only visible to profile owner) */}
+              {/* Saved Startups Section (Private, only visible to profile owner) with polished Empty State */}
               {isOwnProfile && (
-                <section className="px-4 md:px-8 pt-8 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-8">
-                  <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-6">
+                <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+                  <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                     <CheckCircle className="w-5 h-5 text-sky-500 flex-shrink-0" />
                     <h2 className="text-lg font-bold tracking-tight">Saved Startups</h2>
                   </div>
@@ -856,16 +937,20 @@ export function ProfilePage() {
                       )}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/20 p-8 text-center">
-                      <p className="text-sm text-zinc-500">No saved startups yet. Save products from the feed to build your collection.</p>
+                    <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-950/20 p-8 text-center flex flex-col items-center justify-center shadow-sm">
+                      <div className="w-10 h-10 rounded-full bg-sky-100 dark:bg-sky-955/40 text-sky-500 flex items-center justify-center mb-3">
+                        <CheckCircle className="w-5 h-5" />
+                      </div>
+                      <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1">No Saved Startups</h4>
+                      <p className="text-xs text-zinc-500 max-w-xs">No saved startups yet. Save products from the feed to build your collection.</p>
                     </div>
                   )}
                 </section>
               )}
 
-              {/* Recent Activity Timeline Section */}
-              <section className="px-4 md:px-8 pt-8 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-8">
-                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-6">
+              {/* Recent Activity Timeline Section with polished Empty State */}
+              <section id="timeline-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+                <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                   <Activity className="w-5 h-5 text-orange-500 flex-shrink-0" />
                   <h2 className="text-lg font-bold tracking-tight">Recent Activity</h2>
                 </div>
@@ -884,7 +969,7 @@ export function ProfilePage() {
                           </div>
 
                           {/* Event card */}
-                          <div className="p-4.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:border-orange-500/20 hover:shadow-md transition-all shadow-sm">
+                          <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:border-orange-500/20 hover:shadow-md transition-all shadow-sm">
                             <div className="flex justify-between items-start gap-4">
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider text-zinc-400">
@@ -908,7 +993,7 @@ export function ProfilePage() {
                               
                               <Link
                                 to={event.link}
-                                className="text-xs font-bold text-orange-500 hover:text-orange-600 flex-shrink-0 border border-orange-500/15 hover:border-orange-500/35 rounded-xl px-3 py-1.5 bg-orange-500/5 hover:bg-orange-500/10 transition-colors"
+                                className="text-xs font-bold text-orange-500 hover:text-orange-600 flex-shrink-0 border border-orange-500/15 hover:border-orange-500/35 rounded-xl px-3 py-1.5 bg-orange-500/5 hover:bg-orange-500/10 transition-colors h-8 flex items-center justify-center"
                               >
                                 View
                               </Link>
@@ -919,8 +1004,12 @@ export function ProfilePage() {
                     })}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 p-8 text-center">
-                    <p className="text-sm text-zinc-550 dark:text-zinc-400">No activity milestones recorded yet.</p>
+                  <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-950/20 p-8 text-center flex flex-col items-center justify-center shadow-sm">
+                    <div className="w-10 h-10 rounded-full bg-sky-100 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center mb-3">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1">No Activity</h4>
+                    <p className="text-xs text-zinc-550 dark:text-zinc-400">No activity milestones or discussions recorded yet.</p>
                   </div>
                 )}
               </section>
