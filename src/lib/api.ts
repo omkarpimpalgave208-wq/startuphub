@@ -838,6 +838,11 @@ export const api = {
     const website_url = (data.website_url as string | null) || (data.website as string | null) || null;
     const banner_url = (data.banner_url as string | null) || null;
     const banner_style = (data.banner_style as string | null) || null;
+    const banner_zoom = typeof data.banner_zoom === 'number' ? data.banner_zoom : null;
+    const banner_position_x = typeof data.banner_position_x === 'number' ? data.banner_position_x : null;
+    const banner_position_y = typeof data.banner_position_y === 'number' ? data.banner_position_y : null;
+    const original_image_width = typeof data.original_image_width === 'number' ? data.original_image_width : null;
+    const original_image_height = typeof data.original_image_height === 'number' ? data.original_image_height : null;
     const location = (data.location as string | null) || null;
     const skills = Array.isArray(data.skills) ? data.skills : [];
     const achievements = Array.isArray(data.achievements) ? data.achievements : [];
@@ -863,6 +868,11 @@ export const api = {
       website_url,
       banner_url,
       banner_style,
+      banner_zoom,
+      banner_position_x,
+      banner_position_y,
+      original_image_width,
+      original_image_height,
       location,
       skills,
       achievements,
@@ -1041,6 +1051,8 @@ export const api = {
       'username', 'full_name', 'avatar_url', 'headline', 'bio',
       'website', 'website_url', 'github_url', 'twitter_url', 'linkedin_url',
       'location', 'banner_url', 'banner_style',
+      'banner_zoom', 'banner_position_x', 'banner_position_y',
+      'original_image_width', 'original_image_height',
       'skills', 'achievements', 'experience',
       'college_name', 'studying_year',
       'last_seen',

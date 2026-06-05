@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
@@ -52,8 +53,55 @@ export function ProfilePage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState('');
   const [coverStyle, setCoverStyle] = useState('gradient-1');
+  const [coverZoom, setCoverZoom] = useState(1.0);
+  const [coverPositionX, setCoverPositionX] = useState(0.5);
+  const [coverPositionY, setCoverPositionY] = useState(0.35);
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [shareCopied, setShareCopied] = useState(false);
+
+  async function fetchProfile() {
+    if (!username) return;
+
+    setLoading(true);
+    setActionMessage(null);
+
+    try {
+      const profileData = await api.getProfileByUsername(username);
+      if (!profileData) {
+        setProfile(null);
+        return;
+      }
+
+      const productPromise = api.getProducts({ userId: profileData.id });
+      const connectionPromise = api.getConnectionCount(profileData.id);
+      const followPromise = user ? api.checkFollow(user.id, profileData.id) : Promise.resolve(false);
+      const statusPromise = user ? api.getConnectionStatus(user.id, profileData.id) : Promise.resolve({ state: 'none' as const });
+      const discussionsPromise = api.getDiscussions({ userId: profileData.id });
+
+      const [productsData, connectionsCount, followState, connectionStatus, discussionsData] = await Promise.all([
+        productPromise,
+        connectionPromise,
+        followPromise,
+        statusPromise,
+        discussionsPromise
+      ]);
+
+      setProfile({ ...profileData, connections: connectionsCount });
+      setProducts(productsData);
+      setIsFollowing(followState);
+      setConnectionState(connectionStatus.state);
+      setConnectionRequestId(connectionStatus.requestId ?? null);
+      setDiscussions(discussionsData);
+
+      if (user?.id === profileData.id) {
+        await fetchIncomingRequests(user.id);
+      }
+    } catch (err) {
+      console.error('Error fetching profile data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     fetchProfile();
@@ -64,12 +112,46 @@ export function ProfilePage() {
     try {
       const storedCover = localStorage.getItem(PROFILE_COVER_KEY(profile.id));
       const storedStyle = localStorage.getItem(PROFILE_COVER_STYLE_KEY(profile.id));
-      setCoverUrl(storedCover || '');
-      setCoverStyle(storedStyle || 'gradient-1');
+      
+      const dbCover = profile.banner_url || storedCover || '';
+      const dbStyle = profile.banner_style || storedStyle || 'gradient-1';
+
+      // Load zoom and position metadata (database takes precedence, fallback to localStorage, then defaults)
+      const zoomVal = profile.banner_zoom !== null && profile.banner_zoom !== undefined
+        ? profile.banner_zoom
+        : parseFloat(localStorage.getItem(`startuphub_cover_zoom_${profile.id}`) || '1.0');
+
+      const posXVal = profile.banner_position_x !== null && profile.banner_position_x !== undefined
+        ? profile.banner_position_x
+        : parseFloat(localStorage.getItem(`startuphub_cover_focus_${profile.id}`)?.split(',')[0] || '0.5');
+
+      const posYVal = profile.banner_position_y !== null && profile.banner_position_y !== undefined
+        ? profile.banner_position_y
+        : parseFloat(localStorage.getItem(`startuphub_cover_focus_${profile.id}`)?.split(',')[1] || '0.35');
+
+      setCoverUrl(dbCover);
+      setCoverStyle(dbStyle);
+      setCoverZoom(zoomVal);
+      setCoverPositionX(posXVal);
+      setCoverPositionY(posYVal);
     } catch (err) {
-      console.warn('Unable to load profile cover from local storage', err);
+      console.warn('Unable to load profile cover state from local storage or database', err);
     }
   }, [profile]);
+
+  async function fetchBookmarks() {
+    if (!profile) return;
+
+    setSavedLoading(true);
+    try {
+      const savedItems = await api.getBookmarks(profile.id);
+      setBookmarks(savedItems);
+    } catch (err) {
+      console.error('Error fetching saved items:', err);
+    } finally {
+      setSavedLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!profile || user?.id !== profile.id) return;
@@ -121,64 +203,6 @@ export function ProfilePage() {
       setIncomingRequests(requests);
     } catch (err) {
       console.error('Error fetching incoming connection requests:', err);
-    }
-  };
-
-  const fetchProfile = async () => {
-    if (!username) return;
-
-    setLoading(true);
-    setActionMessage(null);
-
-    try {
-      const profileData = await api.getProfileByUsername(username);
-      if (!profileData) {
-        setProfile(null);
-        return;
-      }
-
-      const productPromise = api.getProducts({ userId: profileData.id });
-      const connectionPromise = api.getConnectionCount(profileData.id);
-      const followPromise = user ? api.checkFollow(user.id, profileData.id) : Promise.resolve(false);
-      const statusPromise = user ? api.getConnectionStatus(user.id, profileData.id) : Promise.resolve({ state: 'none' as const });
-      const discussionsPromise = api.getDiscussions({ userId: profileData.id });
-
-      const [productsData, connectionsCount, followState, connectionStatus, discussionsData] = await Promise.all([
-        productPromise,
-        connectionPromise,
-        followPromise,
-        statusPromise,
-        discussionsPromise
-      ]);
-
-      setProfile({ ...profileData, connections: connectionsCount });
-      setProducts(productsData);
-      setIsFollowing(followState);
-      setConnectionState(connectionStatus.state);
-      setConnectionRequestId(connectionStatus.requestId ?? null);
-      setDiscussions(discussionsData);
-
-      if (user?.id === profileData.id) {
-        await fetchIncomingRequests(user.id);
-      }
-    } catch (err) {
-      console.error('Error fetching profile data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchBookmarks = async () => {
-    if (!profile) return;
-
-    setSavedLoading(true);
-    try {
-      const savedItems = await api.getBookmarks(profile.id);
-      setBookmarks(savedItems);
-    } catch (err) {
-      console.error('Error fetching saved items:', err);
-    } finally {
-      setSavedLoading(false);
     }
   };
 
@@ -494,22 +518,17 @@ export function ProfilePage() {
           style={{ height: 'clamp(220px, 35vh, 320px)' }}
         >
           {coverUrl ? (
-            <>
-              {/* Subtle blurred background fill */}
-              <img
-                src={coverUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover blur-2xl opacity-50 scale-110 pointer-events-none"
-                aria-hidden="true"
-              />
-              {/* Main cover — object-cover for full bleed, center crop */}
-              <img
-                src={coverUrl}
-                alt="Profile cover"
-                className="absolute inset-0 h-full w-full object-cover object-center"
-                loading="lazy"
-              />
-            </>
+            <img
+              src={coverUrl}
+              alt="Profile cover"
+              className="w-full h-full object-cover select-none pointer-events-none"
+              style={{
+                objectPosition: `${coverPositionX * 100}% ${coverPositionY * 100}%`,
+                transform: `scale(${coverZoom})`,
+                transformOrigin: 'center'
+              }}
+              loading="lazy"
+            />
           ) : (
             <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
           )}

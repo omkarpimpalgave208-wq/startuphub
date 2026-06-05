@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react';
 import { Loader2, Camera } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -7,6 +8,7 @@ import { Textarea } from '../components/ui/Textarea';
 import { Avatar } from '../components/ui/Avatar';
 import { api } from '../lib/api';
 import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
+import { CoverEditorModal } from '../components/CoverEditorModal';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -28,6 +30,10 @@ export function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [bannerPreview, setBannerPreview] = useState<string>('');
   const [bannerStyle, setBannerStyle] = useState<string>('gradient-1');
+  const [bannerZoom, setBannerZoom] = useState<number>(1.0);
+  const [bannerPositionX, setBannerPositionX] = useState<number>(0.5);
+  const [bannerPositionY, setBannerPositionY] = useState<number>(0.35);
+  const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
   const [uploadMessage, setUploadMessage] = useState<string>('');
   const [bannerMessage, setBannerMessage] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
@@ -74,15 +80,42 @@ export function SettingsPage() {
       if (storedCoverStyle) {
         setBannerStyle(storedCoverStyle);
       }
+
+      // Load zoom and position metadata (database takes precedence)
+      const zoomVal = profile.banner_zoom !== null && profile.banner_zoom !== undefined
+        ? profile.banner_zoom
+        : parseFloat(localStorage.getItem(PROFILE_COVER_ZOOM_KEY(profile.id)) || '1.0');
+
+      const posXVal = profile.banner_position_x !== null && profile.banner_position_x !== undefined
+        ? profile.banner_position_x
+        : parseFloat(localStorage.getItem(PROFILE_COVER_FOCUS_KEY(profile.id))?.split(',')[0] || '0.5');
+
+      const posYVal = profile.banner_position_y !== null && profile.banner_position_y !== undefined
+        ? profile.banner_position_y
+        : parseFloat(localStorage.getItem(PROFILE_COVER_FOCUS_KEY(profile.id))?.split(',')[1] || '0.35');
+
+      setBannerZoom(zoomVal);
+      setBannerPositionX(posXVal);
+      setBannerPositionY(posYVal);
     }
   }, [profile]);
 
-  const saveCoverState = (coverUrl: string | null, styleId: string) => {
+  const saveCoverState = (
+    coverUrl: string | null,
+    styleId: string,
+    zoom: number = 1.0,
+    posX: number = 0.5,
+    posY: number = 0.35
+  ) => {
     if (!user) return;
     if (coverUrl) {
       localStorage.setItem(PROFILE_COVER_KEY(user.id), coverUrl);
+      localStorage.setItem(PROFILE_COVER_ZOOM_KEY(user.id), zoom.toString());
+      localStorage.setItem(PROFILE_COVER_FOCUS_KEY(user.id), `${posX},${posY}`);
     } else {
       localStorage.removeItem(PROFILE_COVER_KEY(user.id));
+      localStorage.removeItem(PROFILE_COVER_ZOOM_KEY(user.id));
+      localStorage.removeItem(PROFILE_COVER_FOCUS_KEY(user.id));
     }
     localStorage.setItem(PROFILE_COVER_STYLE_KEY(user.id), styleId);
   };
@@ -142,6 +175,26 @@ export function SettingsPage() {
     }
   };
 
+  const checkImageResolution = (file: File): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        };
+        img.onerror = () => {
+          reject(new Error('Failed to load image file.'));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to read file.'));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleBannerChange = async (file: File) => {
     if (!user) return;
     setBannerMessage('');
@@ -154,17 +207,25 @@ export function SettingsPage() {
 
     setLoading(true);
     try {
+      setBannerMessage('Checking image resolution...');
+      const dimensions = await checkImageResolution(file);
+      if (dimensions.width < 1500) {
+        setBannerMessage('✗ Cover image width must be at least 1500px (recommended: 2000×500).');
+        setLoading(false);
+        return;
+      }
+
       let fileToUpload = file;
-      const maxSizeMB = 2;
+      const maxSizeMB = 4; // Banners are larger for high quality
 
       if (needsCompression(file, maxSizeMB)) {
         setBannerMessage(`File is ${formatFileSize(file.size)}. Compressing...`);
         try {
           const { file: compressedFile, originalSize, compressedSize } = await optimizeImageFile(file, {
-            maxWidth: 1600,
-            maxHeight: 1200,
-            maxSizeMB: 1.5,
-            quality: 0.85
+            maxWidth: 2400,
+            maxHeight: 1600,
+            maxSizeMB: 3.5,
+            quality: 0.90
           });
           fileToUpload = compressedFile;
           console.log(`[SettingsPage] Banner compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}`);
@@ -176,8 +237,30 @@ export function SettingsPage() {
       setBannerMessage('Uploading cover photo...');
       const publicUrl = await api.uploadFile(fileToUpload, 'covers');
       setBannerPreview(publicUrl);
-      saveCoverState(publicUrl, bannerStyle);
-      setBannerMessage('✓ Cover photo updated successfully.');
+
+      // Smart default focal point (50% horizontal, 35% vertical)
+      const defaultZoom = 1.0;
+      const defaultPosX = 0.5;
+      const defaultPosY = 0.35;
+
+      saveCoverState(publicUrl, bannerStyle, defaultZoom, defaultPosX, defaultPosY);
+      
+      setBannerZoom(defaultZoom);
+      setBannerPositionX(defaultPosX);
+      setBannerPositionY(defaultPosY);
+
+      await api.updateProfile(user.id, {
+        banner_url: publicUrl,
+        banner_zoom: defaultZoom,
+        banner_position_x: defaultPosX,
+        banner_position_y: defaultPosY,
+        original_image_width: dimensions.width,
+        original_image_height: dimensions.height
+      });
+
+      await fetchProfile(user.id);
+      setBannerMessage('✓ Cover photo uploaded successfully. Adjust position below.');
+      setIsEditorOpen(true);
     } catch (err: any) {
       console.error('Banner upload failed:', err);
       const message = err?.message || 'Banner upload failed. Please try again.';
@@ -213,9 +296,35 @@ export function SettingsPage() {
     }
   };
 
-  const handleStyleChange = (styleId: string) => {
+  const handleStyleChange = async (styleId: string) => {
     setBannerStyle(styleId);
-    saveCoverState(bannerPreview || null, styleId);
+    saveCoverState(bannerPreview || null, styleId, bannerZoom, bannerPositionX, bannerPositionY);
+    if (user) {
+      try {
+        await api.updateProfile(user.id, { banner_style: styleId });
+      } catch (err) {
+        console.error('[SettingsPage] Failed to update banner style in DB:', err);
+      }
+    }
+  };
+
+  const handleSaveCoverPosition = async (newZoom: number, newPosX: number, newPosY: number) => {
+    if (!user) return;
+    saveCoverState(bannerPreview || null, bannerStyle, newZoom, newPosX, newPosY);
+    setBannerZoom(newZoom);
+    setBannerPositionX(newPosX);
+    setBannerPositionY(newPosY);
+
+    try {
+      await api.updateProfile(user.id, {
+        banner_zoom: newZoom,
+        banner_position_x: newPosX,
+        banner_position_y: newPosY
+      });
+      await fetchProfile(user.id);
+    } catch (err) {
+      console.error('[SettingsPage] Save cover position failed:', err);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -309,10 +418,26 @@ export function SettingsPage() {
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h3 className="font-medium text-zinc-900 dark:text-white">Cover Photo</h3>
-              <p className="text-sm text-zinc-500">Upload a cover image or choose a premium gradient banner.</p>
+              <p className="text-sm text-zinc-500">Upload a cover image (min-width: 1500px, recommended: 2000×500) or choose a premium gradient banner.</p>
             </div>
-             <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => { setBannerPreview(''); saveCoverState(null, bannerStyle); }}>
+            <div className="flex gap-2 flex-shrink-0">
+              {bannerPreview && (
+                <Button type="button" variant="outline" onClick={() => setIsEditorOpen(true)}>
+                  Reposition Cover
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={async () => {
+                setBannerPreview('');
+                saveCoverState(null, bannerStyle);
+                if (user) {
+                  try {
+                    await api.updateProfile(user.id, { banner_url: null });
+                    await fetchProfile(user.id);
+                  } catch (err) {
+                    console.error('[SettingsPage] Reset banner in DB failed:', err);
+                  }
+                }
+              }}>
                 Reset Cover
               </Button>
             </div>
@@ -327,19 +452,16 @@ export function SettingsPage() {
             onDrop={onDrop}
           >
             {bannerPreview ? (
-              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-955 relative flex items-center justify-center">
-                {/* Blurred background preview layer to match profile page */}
-                <img
-                  src={bannerPreview}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-60 scale-110 pointer-events-none"
-                  aria-hidden="true"
-                />
-                {/* Main foreground image contained and centered */}
+              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-955 relative flex items-center justify-center border border-zinc-200 dark:border-zinc-800">
                 <img
                   src={bannerPreview}
                   alt="Cover preview"
-                  className="relative z-10 h-full w-full object-contain block mx-auto"
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                  style={{
+                    objectPosition: `${bannerPositionX * 100}% ${bannerPositionY * 100}%`,
+                    transform: `scale(${bannerZoom})`,
+                    transformOrigin: 'center'
+                  }}
                 />
               </div>
             ) : (
@@ -513,6 +635,18 @@ export function SettingsPage() {
         </form>
       </div>
 
+      {/* Cover Position Editor Modal */}
+      {bannerPreview && (
+        <CoverEditorModal
+          isOpen={isEditorOpen}
+          onClose={() => setIsEditorOpen(false)}
+          imageUrl={bannerPreview}
+          initialZoom={bannerZoom}
+          initialPositionX={bannerPositionX}
+          initialPositionY={bannerPositionY}
+          onSave={handleSaveCoverPosition}
+        />
+      )}
     </div>
   );
 }

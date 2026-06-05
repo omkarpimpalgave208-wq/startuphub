@@ -5,6 +5,11 @@ export interface Profile {
   avatar_url: string | null;
   banner_url?: string | null;
   banner_style?: string | null;
+  banner_zoom?: number | null;
+  banner_position_x?: number | null;
+  banner_position_y?: number | null;
+  original_image_width?: number | null;
+  original_image_height?: number | null;
   location?: string | null;
   headline: string | null;
   bio: string | null;
