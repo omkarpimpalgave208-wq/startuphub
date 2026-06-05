@@ -53,11 +53,11 @@ export function SettingsPage() {
     let baseHeight = containerHeight;
 
     if (imgAspect > containerAspect) {
-      baseWidth = containerWidth;
-      baseHeight = containerWidth / imgAspect;
-    } else {
       baseHeight = containerHeight;
       baseWidth = containerHeight * imgAspect;
+    } else {
+      baseWidth = containerWidth;
+      baseHeight = containerWidth / imgAspect;
     }
 
     return {
@@ -271,19 +271,35 @@ export function SettingsPage() {
     setBannerMessage('Cropping, compressing, and uploading banner...');
 
     try {
-      // Calculate coverScale to convert user-facing zoom to cover-relative zoom factor
-      const imgAspect = imageDims.width / imageDims.height;
-      const containerAspect = 4;
-      const coverScale = imgAspect > containerAspect ? imgAspect / containerAspect : containerAspect / imgAspect;
-      const zoomForCrop = cropZoom / coverScale;
+      // Calculate boundary clamping to prevent empty spaces inside the crop area
+      let containerWidth = 800; // fallback
+      let containerHeight = 200; // fallback
+      if (containerRef.current) {
+        containerWidth = containerRef.current.clientWidth;
+        containerHeight = containerRef.current.clientHeight;
+      }
+      
+      const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
+      
+      let clampedX = cropFocus.x;
+      let clampedY = cropFocus.y;
+      if (imgDispWidth > 0 && imgDispHeight > 0) {
+        const minX = (containerWidth / (2 * imgDispWidth)) * 100;
+        const maxX = 100 - minX;
+        const minY = (containerHeight / (2 * imgDispHeight)) * 100;
+        const maxY = 100 - minY;
+        clampedX = Math.max(minX, Math.min(maxX, cropFocus.x));
+        clampedY = Math.max(minY, Math.min(maxY, cropFocus.y));
+      }
 
       // Crop and compress using focus coordinates (aspect ratio 4:1)
+      // Since cropZoom now natively represents the cover-relative zoom factor, we pass it directly
       const cropped = await cropAndCompressBannerImage(
         selectedBannerFile,
         {
-          x: cropFocus.x,
-          y: cropFocus.y,
-          zoom: zoomForCrop
+          x: clampedX,
+          y: clampedY,
+          zoom: cropZoom
         },
         4 / 1, // Aspect ratio 4:1
         1600, // outputWidth
@@ -348,9 +364,15 @@ export function SettingsPage() {
     const newX = focusStart.x - (deltaX / imgDispWidth) * 100;
     const newY = focusStart.y - (deltaY / imgDispHeight) * 100;
 
+    // Calculate boundary clamping to prevent empty spaces inside the crop area
+    const minX = (containerWidth / (2 * imgDispWidth)) * 100;
+    const maxX = 100 - minX;
+    const minY = (containerHeight / (2 * imgDispHeight)) * 100;
+    const maxY = 100 - minY;
+
     setCropFocus({
-      x: Math.max(0, Math.min(100, newX)),
-      y: Math.max(0, Math.min(100, newY))
+      x: Math.max(minX, Math.min(maxX, newX)),
+      y: Math.max(minY, Math.min(maxY, newY))
     });
   };
 
@@ -383,9 +405,15 @@ export function SettingsPage() {
     const newX = focusStart.x - (deltaX / imgDispWidth) * 100;
     const newY = focusStart.y - (deltaY / imgDispHeight) * 100;
 
+    // Calculate boundary clamping to prevent empty spaces inside the crop area
+    const minX = (containerWidth / (2 * imgDispWidth)) * 100;
+    const maxX = 100 - minX;
+    const minY = (containerHeight / (2 * imgDispHeight)) * 100;
+    const maxY = 100 - minY;
+
     setCropFocus({
-      x: Math.max(0, Math.min(100, newX)),
-      y: Math.max(0, Math.min(100, newY))
+      x: Math.max(minX, Math.min(maxX, newX)),
+      y: Math.max(minY, Math.min(maxY, newY))
     });
   };
 
@@ -456,6 +484,29 @@ export function SettingsPage() {
       setSaving(false);
     }
   };
+
+  // Calculate boundary clamping to prevent empty spaces inside the crop area
+  const getFocusBounds = () => {
+    const container = containerRef.current;
+    if (!container || !imageDims.width || !imageDims.height) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
+    
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    
+    const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
+    if (imgDispWidth <= 0 || imgDispHeight <= 0) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
+
+    const minX = (containerWidth / (2 * imgDispWidth)) * 100;
+    const maxX = 100 - minX;
+    const minY = (containerHeight / (2 * imgDispHeight)) * 100;
+    const maxY = 100 - minY;
+
+    return { minX, maxX, minY, maxY };
+  };
+
+  const { minX, maxX, minY, maxY } = getFocusBounds();
+  const clampedX = Math.max(minX, Math.min(maxX, cropFocus.x));
+  const clampedY = Math.max(minY, Math.min(maxY, cropFocus.y));
 
   if (!user) {
     return (
@@ -737,11 +788,11 @@ export function SettingsPage() {
                   alt="Reposition banner preview"
                   className="absolute pointer-events-none select-none origin-center"
                   style={{
-                    width: imgAspect > 4 ? '100%' : 'auto',
-                    height: imgAspect > 4 ? 'auto' : '100%',
+                    width: imgAspect > 4 ? 'auto' : '100%',
+                    height: imgAspect > 4 ? '100%' : 'auto',
                     left: '50%',
                     top: '50%',
-                    transform: `translate(-50%, -50%) translate(${50 - cropFocus.x}%, ${50 - cropFocus.y}%) scale(${cropZoom})`,
+                    transform: `translate(-50%, -50%) translate(${50 - clampedX}%, ${50 - clampedY}%) scale(${cropZoom})`,
                   }}
                 />
                 
@@ -780,7 +831,38 @@ export function SettingsPage() {
                   max={3}
                   step={0.01}
                   value={cropZoom}
-                  onChange={(e) => setCropZoom(Number(e.target.value))}
+                  onChange={(e) => {
+                    const newZoom = Number(e.target.value);
+                    setCropZoom(newZoom);
+                    
+                    // Clamp cropFocus immediately to prevent blank spaces when zooming out
+                    if (containerRef.current && imageDims.width && imageDims.height) {
+                      const containerWidth = containerRef.current.clientWidth;
+                      const containerHeight = containerRef.current.clientHeight;
+                      
+                      let baseWidth = containerWidth;
+                      let baseHeight = containerHeight;
+                      if (imgAspect > 4) {
+                        baseHeight = containerHeight;
+                        baseWidth = containerHeight * imgAspect;
+                      } else {
+                        baseWidth = containerWidth;
+                        baseHeight = containerWidth / imgAspect;
+                      }
+                      const imgDispWidth = baseWidth * newZoom;
+                      const imgDispHeight = baseHeight * newZoom;
+                      
+                      const nMinX = (containerWidth / (2 * imgDispWidth)) * 100;
+                      const nMaxX = 100 - nMinX;
+                      const nMinY = (containerHeight / (2 * imgDispHeight)) * 100;
+                      const nMaxY = 100 - nMinY;
+                      
+                      setCropFocus(prev => ({
+                        x: Math.max(nMinX, Math.min(nMaxX, prev.x)),
+                        y: Math.max(nMinY, Math.min(nMaxY, prev.y))
+                      }));
+                    }
+                  }}
                   className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
                 />
               </div>
@@ -790,29 +872,31 @@ export function SettingsPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
                     <span>Horizontal Position</span>
-                    <span>{Math.round(cropFocus.x)}%</span>
+                    <span>{Math.round(clampedX)}%</span>
                   </div>
                   <input
                     type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round(cropFocus.x)}
+                    min={minX}
+                    max={maxX}
+                    disabled={maxX <= minX}
+                    value={clampedX}
                     onChange={(e) => setCropFocus(prev => ({ ...prev, x: Number(e.target.value) }))}
-                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
+                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800 disabled:opacity-50"
                   />
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
                     <span>Vertical Position</span>
-                    <span>{Math.round(cropFocus.y)}%</span>
+                    <span>{Math.round(clampedY)}%</span>
                   </div>
                   <input
                     type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round(cropFocus.y)}
+                    min={minY}
+                    max={maxY}
+                    disabled={maxY <= minY}
+                    value={clampedY}
                     onChange={(e) => setCropFocus(prev => ({ ...prev, y: Number(e.target.value) }))}
-                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
+                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800 disabled:opacity-50"
                   />
                 </div>
               </div>
