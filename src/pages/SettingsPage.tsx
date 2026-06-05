@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { Avatar } from '../components/ui/Avatar';
 import { api } from '../lib/api';
-import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
+import { optimizeImageFile, needsCompression, formatFileSize, cropAndCompressBannerImage } from '../lib/imageCompression';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -27,6 +27,17 @@ export function SettingsPage() {
   const [uploadMessage, setUploadMessage] = useState<string>('');
   const [bannerMessage, setBannerMessage] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
+
+  // Banner Crop States
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [selectedBannerFile, setSelectedBannerFile] = useState<File | null>(null);
+  const [cropPreviewUrl, setCropPreviewUrl] = useState<string>('');
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropFocus, setCropFocus] = useState({ x: 50, y: 50 });
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [focusStart, setFocusStart] = useState({ x: 50, y: 50 });
+
   const [formData, setFormData] = useState({
     username: '',
     full_name: '',
@@ -152,31 +163,127 @@ export function SettingsPage() {
       return;
     }
 
-    try {
-      setLoading(true);
-      let fileToUpload = file;
-      const maxSizeMB = 4;
-      if (needsCompression(file, maxSizeMB)) {
-        const { file: compressedFile, originalSize, compressedSize } = await optimizeImageFile(file, {
-          maxWidth: 2400,
-          maxHeight: 800,
-          maxSizeMB: 2,
-          quality: 0.75
-        });
-        fileToUpload = compressedFile;
-        setBannerMessage(`Compressed banner from ${formatFileSize(originalSize)} to ${formatFileSize(compressedSize)}.`);
-      }
+    // Instead of immediately uploading, open the crop editor modal
+    setSelectedBannerFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setCropPreviewUrl(objectUrl);
+    setCropZoom(1);
+    setCropFocus({ x: 50, y: 50 });
+    setCropModalOpen(true);
+  };
 
-      const publicUrl = await api.uploadFile(fileToUpload, 'covers');
+  const handleCropSave = async () => {
+    if (!user || !selectedBannerFile) return;
+    setLoading(true);
+    setCropModalOpen(false);
+    setBannerMessage('Cropping, compressing, and uploading banner...');
+
+    try {
+      // Crop and compress using focus coordinates (aspect ratio 4:1)
+      const cropped = await cropAndCompressBannerImage(
+        selectedBannerFile,
+        {
+          x: cropFocus.x,
+          y: cropFocus.y,
+          zoom: cropZoom
+        },
+        4 / 1, // Aspect ratio 4:1
+        1600, // outputWidth
+        400, // outputHeight
+        {
+          maxWidth: 1600,
+          maxHeight: 400,
+          maxSizeMB: 1.5,
+          quality: 0.85
+        }
+      );
+
+      const publicUrl = await api.uploadFile(cropped.file, 'covers');
       setBannerPreview(publicUrl);
       saveCoverState(publicUrl, bannerStyle);
       setBannerMessage('✓ Cover photo updated successfully.');
     } catch (err: any) {
-      const message = err?.message || 'Cover upload failed. Please try again.';
+      console.error('Crop and upload failed:', err);
+      const message = err?.message || 'Crop or upload failed. Please try again.';
       setBannerMessage(`✗ Error: ${message}`);
     } finally {
       setLoading(false);
+      if (cropPreviewUrl) {
+        URL.revokeObjectURL(cropPreviewUrl);
+        setCropPreviewUrl('');
+      }
+      setSelectedBannerFile(null);
     }
+  };
+
+  const handleCropCancel = () => {
+    setCropModalOpen(false);
+    if (cropPreviewUrl) {
+      URL.revokeObjectURL(cropPreviewUrl);
+      setCropPreviewUrl('');
+    }
+    setSelectedBannerFile(null);
+    setBannerMessage('Banner upload cancelled.');
+  };
+
+  // Click-to-drag mouse handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDraggingImage(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setFocusStart({ x: cropFocus.x, y: cropFocus.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingImage) return;
+    const deltaX = e.clientX - dragStart.x;
+    const deltaY = e.clientY - dragStart.y;
+    
+    const container = e.currentTarget;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    
+    // Scale delta based on zoom factor
+    const sensitivity = 100 / cropZoom;
+    
+    const newX = focusStart.x - (deltaX / width) * sensitivity;
+    const newY = focusStart.y - (deltaY / height) * sensitivity;
+    
+    setCropFocus({
+      x: Math.max(0, Math.min(100, newX)),
+      y: Math.max(0, Math.min(100, newY))
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDraggingImage(false);
+  };
+
+  // Touch-drag handlers for mobile screens
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    setIsDraggingImage(true);
+    setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    setFocusStart({ x: cropFocus.x, y: cropFocus.y });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDraggingImage || e.touches.length !== 1) return;
+    const deltaX = e.touches[0].clientX - dragStart.x;
+    const deltaY = e.touches[0].clientY - dragStart.y;
+    
+    const container = e.currentTarget;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    
+    const sensitivity = 100 / cropZoom;
+    
+    const newX = focusStart.x - (deltaX / width) * sensitivity;
+    const newY = focusStart.y - (deltaY / height) * sensitivity;
+    
+    setCropFocus({
+      x: Math.max(0, Math.min(100, newX)),
+      y: Math.max(0, Math.min(100, newY))
+    });
   };
 
   const onBannerInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,19 +419,12 @@ export function SettingsPage() {
             onDrop={onDrop}
           >
             {bannerPreview ? (
-              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-950 flex items-center justify-center relative">
-                {/* Blurred background image for full coverage */}
-                <img
-                  src={bannerPreview}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover blur-md opacity-40 scale-105"
-                  aria-hidden="true"
-                />
-                {/* Contained full visibility preview image */}
+              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-950 relative">
+                {/* Cover preview showing cropped result cover-fit */}
                 <img
                   src={bannerPreview}
                   alt="Cover preview"
-                  className="relative z-10 max-h-full max-w-full object-contain"
+                  className="absolute inset-0 w-full h-full object-cover object-center"
                 />
               </div>
             ) : (
@@ -485,6 +585,119 @@ export function SettingsPage() {
           </div>
         </form>
       </div>
+
+      {/* Crop Modal */}
+      {cropModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-2xl w-full shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Crop & Reposition Banner</h3>
+              <p className="text-xs text-zinc-500">Drag the image to adjust its crop position or use the zoom slider below.</p>
+            </div>
+
+            {/* Reposition Box aspect-ratio 4:1 */}
+            <div 
+              className="w-full aspect-[4/1] rounded-2xl overflow-hidden relative bg-zinc-950 cursor-move select-none touch-none border border-zinc-200 dark:border-zinc-800"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleMouseUp}
+            >
+              {/* Blurred background copy for aesthetics */}
+              <img
+                src={cropPreviewUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover blur-md opacity-30 pointer-events-none scale-105"
+                aria-hidden="true"
+              />
+              {/* Foreground Image */}
+              <img
+                src={cropPreviewUrl}
+                alt="Reposition banner preview"
+                className="absolute inset-0 h-full w-full object-cover origin-center pointer-events-none select-none"
+                style={{
+                  objectPosition: `${cropFocus.x}% ${cropFocus.y}%`,
+                  transform: `scale(${cropZoom})`
+                }}
+              />
+              {/* Alignment guides overlay */}
+              <div className="absolute inset-0 border border-white/20 pointer-events-none flex flex-col justify-between">
+                <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
+                <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
+              </div>
+            </div>
+
+            {/* Crop Controls */}
+            <div className="space-y-4">
+              {/* Zoom Slider */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
+                  <span>Zoom level</span>
+                  <span>{cropZoom.toFixed(2)}x</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.05}
+                  value={cropZoom}
+                  onChange={(e) => setCropZoom(Number(e.target.value))}
+                  className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
+                />
+              </div>
+
+              {/* Offset Fine Tuning Controls */}
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
+                    <span>Horizontal Position</span>
+                    <span>{Math.round(cropFocus.x)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(cropFocus.x)}
+                    onChange={(e) => setCropFocus(prev => ({ ...prev, x: Number(e.target.value) }))}
+                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
+                    <span>Vertical Position</span>
+                    <span>{Math.round(cropFocus.y)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(cropFocus.y)}
+                    onChange={(e) => setCropFocus(prev => ({ ...prev, y: Number(e.target.value) }))}
+                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-550 text-center italic mt-1">
+                💡 Tip: Click and drag or touch-drag directly on the banner preview to reposition it!
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <Button type="button" variant="ghost" onClick={handleCropCancel} className="text-xs py-2 px-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" onClick={handleCropSave} className="text-xs py-2 px-5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold">
+                Apply Crop & Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
