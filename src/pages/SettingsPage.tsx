@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Loader2, Camera } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/Button';
@@ -31,6 +31,7 @@ export function SettingsPage() {
   const [dragActive, setDragActive] = useState(false);
 
   // Banner Crop States
+  const containerRef = useRef<HTMLDivElement>(null);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [selectedBannerFile, setSelectedBannerFile] = useState<File | null>(null);
   const [cropPreviewUrl, setCropPreviewUrl] = useState<string>('');
@@ -40,6 +41,30 @@ export function SettingsPage() {
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [focusStart, setFocusStart] = useState({ x: 50, y: 50 });
+  const [imageDims, setImageDims] = useState({ width: 0, height: 0 });
+
+  const imgAspect = imageDims.width && imageDims.height ? imageDims.width / imageDims.height : 4;
+
+  const getDisplayedImageSize = (containerWidth: number, containerHeight: number) => {
+    if (!imageDims.width || !imageDims.height) return { width: 0, height: 0 };
+    const containerAspect = 4;
+
+    let baseWidth = containerWidth;
+    let baseHeight = containerHeight;
+
+    if (imgAspect > containerAspect) {
+      baseWidth = containerWidth;
+      baseHeight = containerWidth / imgAspect;
+    } else {
+      baseHeight = containerHeight;
+      baseWidth = containerHeight * imgAspect;
+    }
+
+    return {
+      width: baseWidth * cropZoom,
+      height: baseHeight * cropZoom
+    };
+  };
 
   const [formData, setFormData] = useState({
     username: '',
@@ -177,22 +202,12 @@ export function SettingsPage() {
     img.onload = () => {
       const imgWidth = img.naturalWidth || img.width;
       const imgHeight = img.naturalHeight || img.height;
-      const imgAspect = imgWidth / imgHeight;
-      const containerAspect = 4; // 4:1
 
-      let initialZoom = 1;
-      if (imgAspect > containerAspect) {
-        // Image is wider than container: fit to width
-        initialZoom = containerAspect / imgAspect;
-      } else {
-        // Image is taller than container: fit to height
-        initialZoom = imgAspect / containerAspect;
-      }
-
+      setImageDims({ width: imgWidth, height: imgHeight });
       setSelectedBannerFile(file);
       setCropPreviewUrl(objectUrl);
-      setCropZoom(initialZoom);
-      setZoomMinLimit(initialZoom);
+      setCropZoom(1);
+      setZoomMinLimit(1);
       setCropFocus({ x: 50, y: 50 });
       setCropModalOpen(true);
     };
@@ -224,24 +239,16 @@ export function SettingsPage() {
       img.onload = () => {
         const imgWidth = img.naturalWidth || img.width;
         const imgHeight = img.naturalHeight || img.height;
-        const imgAspect = imgWidth / imgHeight;
-        const containerAspect = 4; // 4:1
 
-        let initialZoom = 1;
-        if (imgAspect > containerAspect) {
-          initialZoom = containerAspect / imgAspect;
-        } else {
-          initialZoom = imgAspect / containerAspect;
-        }
-
+        setImageDims({ width: imgWidth, height: imgHeight });
         setSelectedBannerFile(file);
         setCropPreviewUrl(objectUrl);
-        setZoomMinLimit(initialZoom);
+        setZoomMinLimit(1);
 
         const storedZoom = localStorage.getItem(PROFILE_COVER_ZOOM_KEY(user.id));
         const storedFocus = localStorage.getItem(PROFILE_COVER_FOCUS_KEY(user.id));
 
-        setCropZoom(storedZoom ? Number(storedZoom) : initialZoom);
+        setCropZoom(storedZoom ? Number(storedZoom) : 1);
         setCropFocus(storedFocus ? JSON.parse(storedFocus) : { x: 50, y: 50 });
         setCropModalOpen(true);
         setBannerMessage('');
@@ -264,13 +271,19 @@ export function SettingsPage() {
     setBannerMessage('Cropping, compressing, and uploading banner...');
 
     try {
+      // Calculate coverScale to convert user-facing zoom to cover-relative zoom factor
+      const imgAspect = imageDims.width / imageDims.height;
+      const containerAspect = 4;
+      const coverScale = imgAspect > containerAspect ? imgAspect / containerAspect : containerAspect / imgAspect;
+      const zoomForCrop = cropZoom / coverScale;
+
       // Crop and compress using focus coordinates (aspect ratio 4:1)
       const cropped = await cropAndCompressBannerImage(
         selectedBannerFile,
         {
           x: cropFocus.x,
           y: cropFocus.y,
-          zoom: cropZoom
+          zoom: zoomForCrop
         },
         4 / 1, // Aspect ratio 4:1
         1600, // outputWidth
@@ -319,20 +332,22 @@ export function SettingsPage() {
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingImage) return;
+    if (!isDraggingImage || !imageDims.width || !imageDims.height) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
+    if (imgDispWidth <= 0 || imgDispHeight <= 0) return;
+
     const deltaX = e.clientX - dragStart.x;
     const deltaY = e.clientY - dragStart.y;
-    
-    const container = e.currentTarget;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    
-    // Scale delta based on zoom factor
-    const sensitivity = 100 / cropZoom;
-    
-    const newX = focusStart.x - (deltaX / width) * sensitivity;
-    const newY = focusStart.y - (deltaY / height) * sensitivity;
-    
+
+    const newX = focusStart.x - (deltaX / imgDispWidth) * 100;
+    const newY = focusStart.y - (deltaY / imgDispHeight) * 100;
+
     setCropFocus({
       x: Math.max(0, Math.min(100, newX)),
       y: Math.max(0, Math.min(100, newY))
@@ -352,19 +367,22 @@ export function SettingsPage() {
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!isDraggingImage || e.touches.length !== 1) return;
+    if (!isDraggingImage || e.touches.length !== 1 || !imageDims.width || !imageDims.height) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
+    if (imgDispWidth <= 0 || imgDispHeight <= 0) return;
+
     const deltaX = e.touches[0].clientX - dragStart.x;
     const deltaY = e.touches[0].clientY - dragStart.y;
-    
-    const container = e.currentTarget;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    
-    const sensitivity = 100 / cropZoom;
-    
-    const newX = focusStart.x - (deltaX / width) * sensitivity;
-    const newY = focusStart.y - (deltaY / height) * sensitivity;
-    
+
+    const newX = focusStart.x - (deltaX / imgDispWidth) * 100;
+    const newY = focusStart.y - (deltaY / imgDispHeight) * 100;
+
     setCropFocus({
       x: Math.max(0, Math.min(100, newX)),
       y: Math.max(0, Math.min(100, newY))
@@ -695,6 +713,7 @@ export function SettingsPage() {
             {/* Simulation Wrapper (Allows avatar to overflow banner preview) */}
             <div className="relative pb-10 md:pb-12">
               <div 
+                ref={containerRef}
                 className="w-full aspect-[4/1] rounded-2xl overflow-hidden relative bg-zinc-955 cursor-grab active:cursor-grabbing select-none touch-none border border-zinc-200 dark:border-zinc-800 shadow-inner"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -704,14 +723,25 @@ export function SettingsPage() {
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleMouseUp}
               >
-                {/* Sharp high-quality foreground image */}
+                {/* Blurred background preview layer to match profile page */}
+                <img
+                  src={cropPreviewUrl}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-50 scale-110 pointer-events-none select-none"
+                  aria-hidden="true"
+                />
+
+                {/* Sharp high-quality foreground image positioned absolute centered and scaled */}
                 <img
                   src={cropPreviewUrl}
                   alt="Reposition banner preview"
-                  className="absolute inset-0 h-full w-full object-cover origin-center pointer-events-none select-none"
+                  className="absolute pointer-events-none select-none origin-center"
                   style={{
-                    objectPosition: `${cropFocus.x}% ${cropFocus.y}%`,
-                    transform: `scale(${cropZoom})`
+                    width: imgAspect > 4 ? '100%' : 'auto',
+                    height: imgAspect > 4 ? 'auto' : '100%',
+                    left: '50%',
+                    top: '50%',
+                    transform: `translate(-50%, -50%) translate(${50 - cropFocus.x}%, ${50 - cropFocus.y}%) scale(${cropZoom})`,
                   }}
                 />
                 
@@ -742,12 +772,12 @@ export function SettingsPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm font-semibold text-zinc-650 dark:text-zinc-400">
                   <span>Zoom level</span>
-                  <span>{Math.round((cropZoom / zoomMinLimit) * 100)}%</span>
+                  <span>{Math.round(cropZoom * 100)}%</span>
                 </div>
                 <input
                   type="range"
-                  min={zoomMinLimit}
-                  max={Math.max(3, zoomMinLimit * 3)}
+                  min={1}
+                  max={3}
                   step={0.01}
                   value={cropZoom}
                   onChange={(e) => setCropZoom(Number(e.target.value))}

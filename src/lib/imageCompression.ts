@@ -200,24 +200,24 @@ export async function cropAndCompressBannerImage(
             const originalHeight = img.height;
             const srcAspect = originalWidth / originalHeight;
 
-            let cropWidth = originalWidth;
-            let cropHeight = originalHeight;
-
+            // Calculate scale factor relative to cover zoom state
+            let scaleDraw = 1;
             if (srcAspect > aspectRatio) {
-              cropHeight = originalHeight;
-              cropWidth = Math.round(cropHeight * aspectRatio);
+              // Image is wider: height matches canvas height in cover state
+              scaleDraw = (outputHeight * focus.zoom) / originalHeight;
             } else {
-              cropWidth = originalWidth;
-              cropHeight = Math.round(cropWidth / aspectRatio);
+              // Image is taller/square: width matches canvas width in cover state
+              scaleDraw = (outputWidth * focus.zoom) / originalWidth;
             }
 
-            cropWidth = Math.max(1, Math.min(originalWidth, Math.round(cropWidth / focus.zoom)));
-            cropHeight = Math.max(1, Math.min(originalHeight, Math.round(cropHeight / focus.zoom)));
+            const destW = originalWidth * scaleDraw;
+            const destH = originalHeight * scaleDraw;
 
-            const centerX = Math.round((focus.x / 100) * originalWidth);
-            const centerY = Math.round((focus.y / 100) * originalHeight);
-            const srcX = clamp(centerX - Math.floor(cropWidth / 2), 0, originalWidth - cropWidth);
-            const srcY = clamp(centerY - Math.floor(cropHeight / 2), 0, originalHeight - cropHeight);
+            const centerX = (focus.x / 100) * originalWidth;
+            const centerY = (focus.y / 100) * originalHeight;
+
+            const destX = outputWidth / 2 - centerX * scaleDraw;
+            const destY = outputHeight / 2 - centerY * scaleDraw;
 
             const canvas = document.createElement('canvas');
             canvas.width = outputWidth;
@@ -226,17 +226,37 @@ export async function cropAndCompressBannerImage(
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Failed to get canvas context');
 
-            ctx.drawImage(
-              img,
-              srcX,
-              srcY,
-              cropWidth,
-              cropHeight,
-              0,
-              0,
-              outputWidth,
-              outputHeight
-            );
+            // Fill canvas background with dark zinc color
+            ctx.fillStyle = '#09090b';
+            ctx.fillRect(0, 0, outputWidth, outputHeight);
+
+            // Draw blurred backdrop first if the image doesn't fully cover the canvas
+            const coversCanvas = destX <= 0 && destY <= 0 && (destX + destW) >= outputWidth && (destY + destH) >= outputHeight;
+            if (!coversCanvas) {
+              try {
+                ctx.save();
+                ctx.filter = 'blur(30px) brightness(0.5)';
+                // Draw blurred image stretched/covered to canvas
+                let bgW = outputWidth;
+                let bgH = outputHeight;
+                let bgX = 0;
+                let bgY = 0;
+                if (srcAspect > aspectRatio) {
+                  bgW = outputHeight * srcAspect;
+                  bgX = (outputWidth - bgW) / 2;
+                } else {
+                  bgH = outputWidth / srcAspect;
+                  bgY = (outputHeight - bgH) / 2;
+                }
+                ctx.drawImage(img, bgX - 30, bgY - 30, bgW + 60, bgH + 60);
+                ctx.restore();
+              } catch (blurErr) {
+                console.warn('Canvas filter blur not supported or failed:', blurErr);
+              }
+            }
+
+            // Draw foreground image
+            ctx.drawImage(img, 0, 0, originalWidth, originalHeight, destX, destY, destW, destH);
 
             const compressedBlob = await compressImage(canvas, file, opts);
             const compressedFile = new File(
