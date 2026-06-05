@@ -388,7 +388,7 @@ export function ProfilePage() {
   return (
     <div className="w-full min-h-screen bg-zinc-50 dark:bg-zinc-900 pb-12">
       {/* Cover Banner (Full width) */}
-      <div className="relative h-[220px] sm:h-[260px] md:h-[320px] lg:h-[380px] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
+      <div className="relative h-[140px] sm:h-[200px] md:h-[280px] lg:h-[350px] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
         {coverUrl ? (
           <>
             {/* Blurred background layer under the cover to improve aesthetics */}
@@ -437,21 +437,21 @@ export function ProfilePage() {
       {/* Main Content (Centered layout with sidebar clearance) */}
       <div className="w-full lg:pl-[260px] relative z-10">
         <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0">
-          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-visible pb-8 -mt-12 md:-mt-20">
+          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-visible pb-8 -mt-6 sm:-mt-10 md:-mt-16 lg:-mt-20">
             
             {/* Profile Content Area */}
             <div className="px-2 md:px-8 mt-4">
               
               {/* Avatar & Edit Button Row */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end -mt-14 sm:-mt-20 md:-mt-24 mb-3 gap-5 relative z-10 px-4 md:px-8">
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-10 sm:-mt-14 md:-mt-20 lg:-mt-24 mb-3 gap-5 relative z-10 px-4 md:px-8">
+                <div className="relative mx-auto sm:mx-0">
                   <div className="w-28 h-28 md:w-36 md:h-36 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-xl flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
                     <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
                   </div>
                 </div>
                 
                 {/* Action Buttons (Right-aligned next to avatar on desktop) */}
-                <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 w-full sm:w-auto">
                   {isOwnProfile ? (
                     <Link to="/settings" className="w-full sm:w-auto">
                       <Button variant="outline" className="w-full sm:w-auto text-xs font-bold py-2 px-5 h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl transition-all shadow-sm">
@@ -459,7 +459,7 @@ export function ProfilePage() {
                       </Button>
                     </Link>
                   ) : (
-                    <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 w-full sm:w-auto">
                       <Button
                         variant={isFollowing ? 'outline' : 'primary'}
                         className={`flex-1 sm:flex-initial text-xs font-bold py-2 px-5 h-10 rounded-xl transition-all shadow-sm ${
@@ -503,10 +503,10 @@ export function ProfilePage() {
               </div>
 
               {/* Header Info */}
-              <div className="px-4 md:px-8 space-y-4 pt-1 sm:pt-0">
+              <div className="px-4 md:px-8 space-y-4 pt-1 sm:pt-0 text-center sm:text-left flex flex-col items-center sm:items-start">
                 {/* Name & Badge Row */}
                 <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
                     <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white leading-tight">
                       {profile.full_name || profile.username}
                     </h1>
@@ -547,7 +547,7 @@ export function ProfilePage() {
                   if (!showJoinDate && !showProductCount && !showActive) return null;
                   
                   return (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3.5">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3.5 w-full">
                       {showJoinDate && (
                         <span className="inline-flex items-center gap-1.5">
                           <span className="text-sm">🚀</span>
@@ -578,7 +578,7 @@ export function ProfilePage() {
                 })()}
 
                 {/* Premium Stats Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 w-full">
                   {[
                     { label: 'Products', value: products.length || profile.products || 0, id: 'products-section' },
                     { label: 'Followers', value: profile.followers || 0, id: 'about-section' },
@@ -593,12 +593,12 @@ export function ProfilePage() {
                           targetElement.scrollIntoView({ behavior: 'smooth' });
                         }
                       }}
-                      className="flex flex-col p-4 rounded-2xl border border-zinc-100 dark:border-zinc-900 bg-zinc-50/40 dark:bg-zinc-950/20 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 hover:border-orange-500/20 hover:shadow-md transition-all duration-200 cursor-pointer group"
+                      className="flex flex-col items-center justify-center text-center sm:items-start sm:text-left p-4 rounded-2xl border border-zinc-100 dark:border-zinc-900 bg-zinc-50/40 dark:bg-zinc-950/20 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 hover:border-orange-500/20 hover:shadow-md transition-all duration-200 cursor-pointer group w-full"
                     >
                       <span className="text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight group-hover:text-orange-500 transition-colors">
                         {stat.value}
                       </span>
-                      <span className="text-[10px] md:text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mt-1">
+                      <span className="text-[10px] md:text-xs font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wider mt-1">
                         {stat.label}
                       </span>
                     </div>
@@ -607,7 +607,7 @@ export function ProfilePage() {
 
                 {/* Social Links as modern pills */}
                 {profileLinks.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-2">
+                  <div className="flex flex-wrap gap-2 pt-2 justify-center sm:justify-start">
                     {profileLinks.map((item) => {
                       const Icon = item.icon;
                       return (
