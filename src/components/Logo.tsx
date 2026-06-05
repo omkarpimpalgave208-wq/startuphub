@@ -2,11 +2,11 @@ import logo from '../assets/startuphub-logo.png';
 
 export function Logo({ className, showTextOnMobile = true }: { className?: string; showTextOnMobile?: boolean }) {
   return (
-    <div className={`flex items-center gap-2 ${className ?? ''}`}>
+    <div className={`flex items-center gap-1.5 ${className ?? ''}`}>
       <img
         src={logo}
         alt="StartupHub Logo"
-        className="w-[34px] h-[34px] sm:w-[42px] sm:h-[42px] flex-shrink-0 object-contain transition-transform hover:scale-105 duration-200"
+        className="w-[39px] h-[39px] sm:w-[47px] sm:h-[47px] -ml-1 -mr-0.5 flex-shrink-0 object-contain transition-transform hover:scale-105 duration-200"
       />
 
       <span
