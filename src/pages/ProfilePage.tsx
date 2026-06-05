@@ -391,18 +391,18 @@ export function ProfilePage() {
       <div className="relative h-[220px] sm:h-[260px] md:h-[320px] lg:h-[380px] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
         {coverUrl ? (
           <>
-            {/* Blurred background image for full coverage, stretching edge-to-edge with no gaps */}
+            {/* Blurred background layer under the cover to improve aesthetics */}
             <img
               src={coverUrl}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-80 scale-110 pointer-events-none"
+              className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-50 scale-110 pointer-events-none"
               aria-hidden="true"
             />
-            {/* Main cover image, contained to show the full image centered */}
+            {/* Main cover image, cover-fit to fill the banner area horizontally like LinkedIn */}
             <img
               src={coverUrl}
               alt="Profile cover"
-              className="relative z-10 max-h-full max-w-full object-contain block mx-auto"
+              className="relative z-10 h-full w-full object-cover object-center block"
               loading="lazy"
             />
           </>
