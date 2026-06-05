@@ -475,7 +475,7 @@ export function ProfilePage() {
             <div className="px-2 md:px-8 mt-4">
               
               {/* Avatar & Edit Button Row */}
-              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-6 sm:-mt-16 md:-mt-20 lg:-mt-24 mb-4 gap-4 relative z-10 px-4 md:px-8">
+              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-[45px] sm:-mt-[58px] md:-mt-[65px] mb-4 gap-4 relative z-10 px-4 md:px-8">
                 <div className="relative mx-auto sm:mx-0">
                   <div className="w-[100px] h-[100px] sm:w-32 sm:h-32 md:w-36 md:h-36 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-xl flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
                     <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
