@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Camera } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/Button';
@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { Avatar } from '../components/ui/Avatar';
 import { api } from '../lib/api';
-import { optimizeImageFile, needsCompression, formatFileSize, cropAndCompressBannerImage } from '../lib/imageCompression';
+import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -29,42 +29,6 @@ export function SettingsPage() {
   const [uploadMessage, setUploadMessage] = useState<string>('');
   const [bannerMessage, setBannerMessage] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
-
-  // Banner Crop States
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [cropModalOpen, setCropModalOpen] = useState(false);
-  const [selectedBannerFile, setSelectedBannerFile] = useState<File | null>(null);
-  const [cropPreviewUrl, setCropPreviewUrl] = useState<string>('');
-  const [cropZoom, setCropZoom] = useState(1);
-  const [zoomMinLimit, setZoomMinLimit] = useState(1);
-  const [cropFocus, setCropFocus] = useState({ x: 50, y: 50 });
-  const [isDraggingImage, setIsDraggingImage] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [focusStart, setFocusStart] = useState({ x: 50, y: 50 });
-  const [imageDims, setImageDims] = useState({ width: 0, height: 0 });
-
-  const imgAspect = imageDims.width && imageDims.height ? imageDims.width / imageDims.height : 4;
-
-  const getDisplayedImageSize = (containerWidth: number, containerHeight: number) => {
-    if (!imageDims.width || !imageDims.height) return { width: 0, height: 0 };
-    const containerAspect = 4;
-
-    let baseWidth = containerWidth;
-    let baseHeight = containerHeight;
-
-    if (imgAspect > containerAspect) {
-      baseHeight = containerHeight;
-      baseWidth = containerHeight * imgAspect;
-    } else {
-      baseWidth = containerWidth;
-      baseHeight = containerWidth / imgAspect;
-    }
-
-    return {
-      width: baseWidth * cropZoom,
-      height: baseHeight * cropZoom
-    };
-  };
 
   const [formData, setFormData] = useState({
     username: '',
@@ -111,16 +75,12 @@ export function SettingsPage() {
     }
   }, [profile]);
 
-  const saveCoverState = (coverUrl: string | null, styleId: string, zoom = 1, focus = { x: 50, y: 50 }) => {
+  const saveCoverState = (coverUrl: string | null, styleId: string) => {
     if (!user) return;
     if (coverUrl) {
       localStorage.setItem(PROFILE_COVER_KEY(user.id), coverUrl);
-      localStorage.setItem(PROFILE_COVER_ZOOM_KEY(user.id), String(zoom));
-      localStorage.setItem(PROFILE_COVER_FOCUS_KEY(user.id), JSON.stringify(focus));
     } else {
       localStorage.removeItem(PROFILE_COVER_KEY(user.id));
-      localStorage.removeItem(PROFILE_COVER_ZOOM_KEY(user.id));
-      localStorage.removeItem(PROFILE_COVER_FOCUS_KEY(user.id));
     }
     localStorage.setItem(PROFILE_COVER_STYLE_KEY(user.id), styleId);
   };
@@ -133,7 +93,6 @@ export function SettingsPage() {
     setUploadMessage('');
     
     try {
-      // Check file type first
       const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
       if (!allowedTypes.includes(file.type)) {
         setUploadMessage('Unsupported file type. Please upload a PNG, JPG, WebP, GIF, or SVG image.');
@@ -141,7 +100,6 @@ export function SettingsPage() {
         return;
       }
 
-      // Check if file needs compression (> 2MB for avatars)
       let fileToUpload = file;
       const maxSizeMB = 2;
       
@@ -160,7 +118,6 @@ export function SettingsPage() {
           setUploadMessage(
             `Image compressed from ${formatFileSize(originalSize)} to ${formatFileSize(compressedSize)}. Uploading...`
           );
-          console.log(`[SettingsPage] Avatar compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}`);
         } catch (compressionErr: any) {
           console.error('[SettingsPage] Compression failed:', compressionErr);
           setUploadMessage(`Compression failed: ${compressionErr?.message || 'Please try again.'}`);
@@ -169,13 +126,11 @@ export function SettingsPage() {
         }
       }
 
-      // Upload the file (original or compressed)
       const publicUrl = await api.uploadFile(fileToUpload, 'avatars');
       setAvatarPreview(publicUrl);
       await api.updateProfile(user.id, { avatar_url: publicUrl });
       await fetchProfile(user.id);
       setUploadMessage('✓ Avatar updated successfully.');
-      console.log('[SettingsPage] Avatar upload completed successfully');
     } catch (err: any) {
       const message = err?.message || 'Avatar upload failed. Please try again.';
       setUploadMessage(`✗ Error: ${message}`);
@@ -195,226 +150,39 @@ export function SettingsPage() {
       return;
     }
 
-    // Instead of immediately uploading, open the crop editor modal with computed scale
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = objectUrl;
-    img.onload = () => {
-      const imgWidth = img.naturalWidth || img.width;
-      const imgHeight = img.naturalHeight || img.height;
-
-      setImageDims({ width: imgWidth, height: imgHeight });
-      setSelectedBannerFile(file);
-      setCropPreviewUrl(objectUrl);
-      setCropZoom(1);
-      setZoomMinLimit(1);
-      setCropFocus({ x: 50, y: 50 });
-      setCropModalOpen(true);
-    };
-    img.onerror = () => {
-      setBannerMessage('Failed to load image for cropping.');
-      URL.revokeObjectURL(objectUrl);
-    };
-  };
-
-  const fetchImageAsFile = async (url: string, filename: string) => {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error('Unable to fetch existing banner image for update.');
-    }
-    const blob = await response.blob();
-    return new File([blob], filename, { type: blob.type || 'image/jpeg' });
-  };
-
-  const handleEditPlacement = async () => {
-    if (!user || !bannerPreview) return;
     setLoading(true);
-    setBannerMessage('Preparing cover photo for repositioning...');
     try {
-      const file = await fetchImageAsFile(bannerPreview, 'current-banner.jpg');
-      const objectUrl = bannerPreview;
-      
-      const img = new Image();
-      img.src = objectUrl;
-      img.onload = () => {
-        const imgWidth = img.naturalWidth || img.width;
-        const imgHeight = img.naturalHeight || img.height;
+      let fileToUpload = file;
+      const maxSizeMB = 2;
 
-        setImageDims({ width: imgWidth, height: imgHeight });
-        setSelectedBannerFile(file);
-        setCropPreviewUrl(objectUrl);
-        setZoomMinLimit(1);
-
-        const storedZoom = localStorage.getItem(PROFILE_COVER_ZOOM_KEY(user.id));
-        const storedFocus = localStorage.getItem(PROFILE_COVER_FOCUS_KEY(user.id));
-
-        setCropZoom(storedZoom ? Number(storedZoom) : 1);
-        setCropFocus(storedFocus ? JSON.parse(storedFocus) : { x: 50, y: 50 });
-        setCropModalOpen(true);
-        setBannerMessage('');
-        setLoading(false);
-      };
-      img.onerror = () => {
-        throw new Error('Failed to load image dimensions.');
-      };
-    } catch (err: any) {
-      console.error('Failed to prepare banner for repositioning:', err);
-      setBannerMessage('Unable to prepare current banner. Please try uploading the image file again.');
-      setLoading(false);
-    }
-  };
-
-  const handleCropSave = async () => {
-    if (!user || !selectedBannerFile) return;
-    setLoading(true);
-    setCropModalOpen(false);
-    setBannerMessage('Cropping, compressing, and uploading banner...');
-
-    try {
-      // Calculate boundary clamping to prevent empty spaces inside the crop area
-      let containerWidth = 800; // fallback
-      let containerHeight = 200; // fallback
-      if (containerRef.current) {
-        containerWidth = containerRef.current.clientWidth;
-        containerHeight = containerRef.current.clientHeight;
-      }
-      
-      const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
-      
-      let clampedX = cropFocus.x;
-      let clampedY = cropFocus.y;
-      if (imgDispWidth > 0 && imgDispHeight > 0) {
-        const minX = (containerWidth / (2 * imgDispWidth)) * 100;
-        const maxX = 100 - minX;
-        const minY = (containerHeight / (2 * imgDispHeight)) * 100;
-        const maxY = 100 - minY;
-        clampedX = Math.max(minX, Math.min(maxX, cropFocus.x));
-        clampedY = Math.max(minY, Math.min(maxY, cropFocus.y));
-      }
-
-      // Crop and compress using focus coordinates (aspect ratio 4:1)
-      // Since cropZoom now natively represents the cover-relative zoom factor, we pass it directly
-      const cropped = await cropAndCompressBannerImage(
-        selectedBannerFile,
-        {
-          x: clampedX,
-          y: clampedY,
-          zoom: cropZoom
-        },
-        4 / 1, // Aspect ratio 4:1
-        1600, // outputWidth
-        400, // outputHeight
-        {
-          maxWidth: 1600,
-          maxHeight: 400,
-          maxSizeMB: 1.5,
-          quality: 0.85
+      if (needsCompression(file, maxSizeMB)) {
+        setBannerMessage(`File is ${formatFileSize(file.size)}. Compressing...`);
+        try {
+          const { file: compressedFile, originalSize, compressedSize } = await optimizeImageFile(file, {
+            maxWidth: 1600,
+            maxHeight: 1200,
+            maxSizeMB: 1.5,
+            quality: 0.85
+          });
+          fileToUpload = compressedFile;
+          console.log(`[SettingsPage] Banner compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}`);
+        } catch (compressionErr: any) {
+          console.error('[SettingsPage] Banner compression failed:', compressionErr);
         }
-      );
+      }
 
-      const publicUrl = await api.uploadFile(cropped.file, 'covers');
+      setBannerMessage('Uploading cover photo...');
+      const publicUrl = await api.uploadFile(fileToUpload, 'covers');
       setBannerPreview(publicUrl);
-      saveCoverState(publicUrl, bannerStyle, cropZoom, cropFocus);
+      saveCoverState(publicUrl, bannerStyle);
       setBannerMessage('✓ Cover photo updated successfully.');
     } catch (err: any) {
-      console.error('Crop and upload failed:', err);
-      const message = err?.message || 'Crop or upload failed. Please try again.';
+      console.error('Banner upload failed:', err);
+      const message = err?.message || 'Banner upload failed. Please try again.';
       setBannerMessage(`✗ Error: ${message}`);
     } finally {
       setLoading(false);
-      if (cropPreviewUrl && cropPreviewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(cropPreviewUrl);
-      }
-      setCropPreviewUrl('');
-      setSelectedBannerFile(null);
     }
-  };
-
-  const handleCropCancel = () => {
-    setCropModalOpen(false);
-    if (cropPreviewUrl && cropPreviewUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(cropPreviewUrl);
-    }
-    setCropPreviewUrl('');
-    setSelectedBannerFile(null);
-    setBannerMessage('Banner upload cancelled.');
-  };
-
-  // Click-to-drag mouse handlers
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsDraggingImage(true);
-    setDragStart({ x: e.clientX, y: e.clientY });
-    setFocusStart({ x: cropFocus.x, y: cropFocus.y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingImage || !imageDims.width || !imageDims.height) return;
-    const container = containerRef.current;
-    if (!container) return;
-
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-
-    const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
-    if (imgDispWidth <= 0 || imgDispHeight <= 0) return;
-
-    const deltaX = e.clientX - dragStart.x;
-    const deltaY = e.clientY - dragStart.y;
-
-    const newX = focusStart.x - (deltaX / imgDispWidth) * 100;
-    const newY = focusStart.y - (deltaY / imgDispHeight) * 100;
-
-    // Calculate boundary clamping to prevent empty spaces inside the crop area
-    const minX = (containerWidth / (2 * imgDispWidth)) * 100;
-    const maxX = 100 - minX;
-    const minY = (containerHeight / (2 * imgDispHeight)) * 100;
-    const maxY = 100 - minY;
-
-    setCropFocus({
-      x: Math.max(minX, Math.min(maxX, newX)),
-      y: Math.max(minY, Math.min(maxY, newY))
-    });
-  };
-
-  const handleMouseUp = () => {
-    setIsDraggingImage(false);
-  };
-
-  // Touch-drag handlers for mobile screens
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1) return;
-    setIsDraggingImage(true);
-    setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-    setFocusStart({ x: cropFocus.x, y: cropFocus.y });
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!isDraggingImage || e.touches.length !== 1 || !imageDims.width || !imageDims.height) return;
-    const container = containerRef.current;
-    if (!container) return;
-
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-
-    const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
-    if (imgDispWidth <= 0 || imgDispHeight <= 0) return;
-
-    const deltaX = e.touches[0].clientX - dragStart.x;
-    const deltaY = e.touches[0].clientY - dragStart.y;
-
-    const newX = focusStart.x - (deltaX / imgDispWidth) * 100;
-    const newY = focusStart.y - (deltaY / imgDispHeight) * 100;
-
-    // Calculate boundary clamping to prevent empty spaces inside the crop area
-    const minX = (containerWidth / (2 * imgDispWidth)) * 100;
-    const maxX = 100 - minX;
-    const minY = (containerHeight / (2 * imgDispHeight)) * 100;
-    const maxY = 100 - minY;
-
-    setCropFocus({
-      x: Math.max(minX, Math.min(maxX, newX)),
-      y: Math.max(minY, Math.min(maxY, newY))
-    });
   };
 
   const onBannerInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -560,16 +328,6 @@ export function SettingsPage() {
               <p className="text-sm text-zinc-500">Upload a cover image or choose a premium gradient banner.</p>
             </div>
              <div className="flex gap-2">
-              {bannerPreview && !bannerPreview.startsWith('data:image') && (
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={handleEditPlacement}
-                  loading={loading}
-                >
-                  Reposition Cover
-                </Button>
-              )}
               <Button type="button" variant="outline" onClick={() => { setBannerPreview(''); saveCoverState(null, bannerStyle); }}>
                 Reset Cover
               </Button>
@@ -585,12 +343,19 @@ export function SettingsPage() {
             onDrop={onDrop}
           >
             {bannerPreview ? (
-              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-950 relative">
-                {/* Cover preview showing cropped result cover-fit */}
+              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-955 relative flex items-center justify-center">
+                {/* Blurred background preview layer to match profile page */}
+                <img
+                  src={bannerPreview}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-60 scale-110 pointer-events-none"
+                  aria-hidden="true"
+                />
+                {/* Main foreground image contained and centered */}
                 <img
                   src={bannerPreview}
                   alt="Cover preview"
-                  className="absolute inset-0 w-full h-full object-cover object-center"
+                  className="relative z-10 h-full w-full object-contain block mx-auto"
                 />
               </div>
             ) : (
@@ -752,168 +517,6 @@ export function SettingsPage() {
         </form>
       </div>
 
-      {/* Crop Modal */}
-      {cropModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 max-w-4xl w-full shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <div className="space-y-1">
-              <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Crop & Reposition Banner</h3>
-              <p className="text-sm text-zinc-500">Drag the image to adjust its crop position or use the zoom slider below.</p>
-            </div>
-
-            {/* Simulation Wrapper (Allows avatar to overflow banner preview) */}
-            <div className="relative pb-10 md:pb-12">
-              <div 
-                ref={containerRef}
-                className="w-full aspect-[4/1] rounded-2xl overflow-hidden relative bg-zinc-955 cursor-grab active:cursor-grabbing select-none touch-none border border-zinc-200 dark:border-zinc-800 shadow-inner"
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleMouseUp}
-              >
-                {/* Blurred background preview layer to match profile page */}
-                <img
-                  src={cropPreviewUrl}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-50 scale-110 pointer-events-none select-none"
-                  aria-hidden="true"
-                />
-
-                {/* Sharp high-quality foreground image positioned absolute centered and scaled */}
-                <img
-                  src={cropPreviewUrl}
-                  alt="Reposition banner preview"
-                  className="absolute pointer-events-none select-none origin-center"
-                  style={{
-                    width: imgAspect > 4 ? 'auto' : '100%',
-                    height: imgAspect > 4 ? '100%' : 'auto',
-                    left: '50%',
-                    top: '50%',
-                    transform: `translate(-50%, -50%) translate(${50 - clampedX}%, ${50 - clampedY}%) scale(${cropZoom})`,
-                  }}
-                />
-                
-                {/* Guidelines grid overlay */}
-                <div className="absolute inset-0 border border-white/20 pointer-events-none flex flex-col justify-between">
-                  <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
-                  <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
-                </div>
-
-                {/* Instruction Badge */}
-                <div className="absolute top-3 left-3 bg-black/60 backdrop-blur text-white px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1.5 pointer-events-none">
-                  <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-                  Drag to reposition cover photo
-                </div>
-              </div>
-
-              {/* Profile Avatar simulation overlay (LinkedIn style) */}
-              <div className="absolute left-6 md:left-10 bottom-2 md:bottom-0 z-20 pointer-events-none">
-                <div className="w-16 h-16 md:w-24 md:h-24 rounded-full border-4 border-white dark:border-zinc-900 shadow-2xl bg-zinc-100 overflow-hidden">
-                  <Avatar src={avatarPreview} alt={formData.full_name || formData.username} className="w-full h-full object-cover" />
-                </div>
-              </div>
-            </div>
-
-            {/* Crop Controls */}
-            <div className="space-y-4">
-              {/* Zoom Slider */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm font-semibold text-zinc-650 dark:text-zinc-400">
-                  <span>Zoom level</span>
-                  <span>{Math.round(cropZoom * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={3}
-                  step={0.01}
-                  value={cropZoom}
-                  onChange={(e) => {
-                    const newZoom = Number(e.target.value);
-                    setCropZoom(newZoom);
-                    
-                    // Clamp cropFocus immediately to prevent blank spaces when zooming out
-                    if (containerRef.current && imageDims.width && imageDims.height) {
-                      const containerWidth = containerRef.current.clientWidth;
-                      const containerHeight = containerRef.current.clientHeight;
-                      
-                      let baseWidth = containerWidth;
-                      let baseHeight = containerHeight;
-                      if (imgAspect > 4) {
-                        baseHeight = containerHeight;
-                        baseWidth = containerHeight * imgAspect;
-                      } else {
-                        baseWidth = containerWidth;
-                        baseHeight = containerWidth / imgAspect;
-                      }
-                      const imgDispWidth = baseWidth * newZoom;
-                      const imgDispHeight = baseHeight * newZoom;
-                      
-                      const nMinX = (containerWidth / (2 * imgDispWidth)) * 100;
-                      const nMaxX = 100 - nMinX;
-                      const nMinY = (containerHeight / (2 * imgDispHeight)) * 100;
-                      const nMaxY = 100 - nMinY;
-                      
-                      setCropFocus(prev => ({
-                        x: Math.max(nMinX, Math.min(nMaxX, prev.x)),
-                        y: Math.max(nMinY, Math.min(nMaxY, prev.y))
-                      }));
-                    }
-                  }}
-                  className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
-                />
-              </div>
-
-              {/* Offset Fine Tuning Controls */}
-              <div className="grid grid-cols-2 gap-4 pt-1">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
-                    <span>Horizontal Position</span>
-                    <span>{Math.round(clampedX)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={minX}
-                    max={maxX}
-                    disabled={maxX <= minX}
-                    value={clampedX}
-                    onChange={(e) => setCropFocus(prev => ({ ...prev, x: Number(e.target.value) }))}
-                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800 disabled:opacity-50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
-                    <span>Vertical Position</span>
-                    <span>{Math.round(clampedY)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={minY}
-                    max={maxY}
-                    disabled={maxY <= minY}
-                    value={clampedY}
-                    onChange={(e) => setCropFocus(prev => ({ ...prev, y: Number(e.target.value) }))}
-                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800 disabled:opacity-50"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-              <Button type="button" variant="ghost" onClick={handleCropCancel} className="text-xs py-2 px-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                Cancel
-              </Button>
-              <Button type="button" variant="primary" onClick={handleCropSave} className="text-xs py-2 px-5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold">
-                Apply Crop & Save
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -395,14 +395,14 @@ export function ProfilePage() {
             <img
               src={coverUrl}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-50 scale-110 pointer-events-none"
+              className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-60 scale-110 pointer-events-none"
               aria-hidden="true"
             />
-            {/* Main cover image, cover-fit to fill the banner area horizontally like LinkedIn */}
+            {/* Main cover image, centered and contained to show the entire uploaded image without stretching */}
             <img
               src={coverUrl}
               alt="Profile cover"
-              className="relative z-10 h-full w-full object-cover object-center block"
+              className="relative z-10 h-full w-full object-contain block mx-auto"
               loading="lazy"
             />
           </>
