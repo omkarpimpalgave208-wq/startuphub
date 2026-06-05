@@ -10,6 +10,8 @@ import { optimizeImageFile, needsCompression, formatFileSize, cropAndCompressBan
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
+const PROFILE_COVER_ZOOM_KEY = (id: string) => `startuphub_cover_zoom_${id}`;
+const PROFILE_COVER_FOCUS_KEY = (id: string) => `startuphub_cover_focus_${id}`;
 
 const coverStyles = [
   { id: 'gradient-1', label: 'Evening Glow', className: 'from-slate-950 via-indigo-700 to-violet-500' },
@@ -83,12 +85,16 @@ export function SettingsPage() {
     }
   }, [profile]);
 
-  const saveCoverState = (coverUrl: string | null, styleId: string) => {
+  const saveCoverState = (coverUrl: string | null, styleId: string, zoom = 1, focus = { x: 50, y: 50 }) => {
     if (!user) return;
     if (coverUrl) {
       localStorage.setItem(PROFILE_COVER_KEY(user.id), coverUrl);
+      localStorage.setItem(PROFILE_COVER_ZOOM_KEY(user.id), String(zoom));
+      localStorage.setItem(PROFILE_COVER_FOCUS_KEY(user.id), JSON.stringify(focus));
     } else {
       localStorage.removeItem(PROFILE_COVER_KEY(user.id));
+      localStorage.removeItem(PROFILE_COVER_ZOOM_KEY(user.id));
+      localStorage.removeItem(PROFILE_COVER_FOCUS_KEY(user.id));
     }
     localStorage.setItem(PROFILE_COVER_STYLE_KEY(user.id), styleId);
   };
@@ -172,6 +178,39 @@ export function SettingsPage() {
     setCropModalOpen(true);
   };
 
+  const fetchImageAsFile = async (url: string, filename: string) => {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Unable to fetch existing banner image for update.');
+    }
+    const blob = await response.blob();
+    return new File([blob], filename, { type: blob.type || 'image/jpeg' });
+  };
+
+  const handleEditPlacement = async () => {
+    if (!user || !bannerPreview) return;
+    setLoading(true);
+    setBannerMessage('Preparing cover photo for repositioning...');
+    try {
+      const file = await fetchImageAsFile(bannerPreview, 'current-banner.jpg');
+      setSelectedBannerFile(file);
+      setCropPreviewUrl(bannerPreview);
+      
+      const storedZoom = localStorage.getItem(PROFILE_COVER_ZOOM_KEY(user.id));
+      const storedFocus = localStorage.getItem(PROFILE_COVER_FOCUS_KEY(user.id));
+      
+      setCropZoom(storedZoom ? Number(storedZoom) : 1);
+      setCropFocus(storedFocus ? JSON.parse(storedFocus) : { x: 50, y: 50 });
+      setCropModalOpen(true);
+      setBannerMessage('');
+    } catch (err: any) {
+      console.error('Failed to prepare banner for repositioning:', err);
+      setBannerMessage('Unable to prepare current banner. Please try uploading the image file again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCropSave = async () => {
     if (!user || !selectedBannerFile) return;
     setLoading(true);
@@ -200,7 +239,7 @@ export function SettingsPage() {
 
       const publicUrl = await api.uploadFile(cropped.file, 'covers');
       setBannerPreview(publicUrl);
-      saveCoverState(publicUrl, bannerStyle);
+      saveCoverState(publicUrl, bannerStyle, cropZoom, cropFocus);
       setBannerMessage('✓ Cover photo updated successfully.');
     } catch (err: any) {
       console.error('Crop and upload failed:', err);
@@ -208,20 +247,20 @@ export function SettingsPage() {
       setBannerMessage(`✗ Error: ${message}`);
     } finally {
       setLoading(false);
-      if (cropPreviewUrl) {
+      if (cropPreviewUrl && cropPreviewUrl.startsWith('blob:')) {
         URL.revokeObjectURL(cropPreviewUrl);
-        setCropPreviewUrl('');
       }
+      setCropPreviewUrl('');
       setSelectedBannerFile(null);
     }
   };
 
   const handleCropCancel = () => {
     setCropModalOpen(false);
-    if (cropPreviewUrl) {
+    if (cropPreviewUrl && cropPreviewUrl.startsWith('blob:')) {
       URL.revokeObjectURL(cropPreviewUrl);
-      setCropPreviewUrl('');
     }
+    setCropPreviewUrl('');
     setSelectedBannerFile(null);
     setBannerMessage('Banner upload cancelled.');
   };
@@ -405,9 +444,21 @@ export function SettingsPage() {
               <h3 className="font-medium text-zinc-900 dark:text-white">Cover Photo</h3>
               <p className="text-sm text-zinc-500">Upload a cover image or choose a premium gradient banner.</p>
             </div>
-            <Button type="button" variant="outline" onClick={() => { setBannerPreview(''); saveCoverState(null, bannerStyle); }}>
-              Reset Cover
-            </Button>
+             <div className="flex gap-2">
+              {bannerPreview && !bannerPreview.startsWith('data:image') && (
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handleEditPlacement}
+                  loading={loading}
+                >
+                  Reposition Cover
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={() => { setBannerPreview(''); saveCoverState(null, bannerStyle); }}>
+                Reset Cover
+              </Button>
+            </div>
           </div>
 
           <div
@@ -588,45 +639,54 @@ export function SettingsPage() {
 
       {/* Crop Modal */}
       {cropModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-2xl w-full shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 max-w-4xl w-full shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200">
             <div className="space-y-1">
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Crop & Reposition Banner</h3>
-              <p className="text-xs text-zinc-500">Drag the image to adjust its crop position or use the zoom slider below.</p>
+              <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Crop & Reposition Banner</h3>
+              <p className="text-sm text-zinc-500">Drag the image to adjust its crop position or use the zoom slider below.</p>
             </div>
 
-            {/* Reposition Box aspect-ratio 4:1 */}
-            <div 
-              className="w-full aspect-[4/1] rounded-2xl overflow-hidden relative bg-zinc-950 cursor-move select-none touch-none border border-zinc-200 dark:border-zinc-800"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleMouseUp}
-            >
-              {/* Blurred background copy for aesthetics */}
-              <img
-                src={cropPreviewUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover blur-md opacity-30 pointer-events-none scale-105"
-                aria-hidden="true"
-              />
-              {/* Foreground Image */}
-              <img
-                src={cropPreviewUrl}
-                alt="Reposition banner preview"
-                className="absolute inset-0 h-full w-full object-cover origin-center pointer-events-none select-none"
-                style={{
-                  objectPosition: `${cropFocus.x}% ${cropFocus.y}%`,
-                  transform: `scale(${cropZoom})`
-                }}
-              />
-              {/* Alignment guides overlay */}
-              <div className="absolute inset-0 border border-white/20 pointer-events-none flex flex-col justify-between">
-                <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
-                <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
+            {/* Simulation Wrapper (Allows avatar to overflow banner preview) */}
+            <div className="relative pb-10 md:pb-12">
+              <div 
+                className="w-full aspect-[4/1] rounded-2xl overflow-hidden relative bg-zinc-955 cursor-grab active:cursor-grabbing select-none touch-none border border-zinc-200 dark:border-zinc-800 shadow-inner"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleMouseUp}
+              >
+                {/* Sharp high-quality foreground image */}
+                <img
+                  src={cropPreviewUrl}
+                  alt="Reposition banner preview"
+                  className="absolute inset-0 h-full w-full object-cover origin-center pointer-events-none select-none"
+                  style={{
+                    objectPosition: `${cropFocus.x}% ${cropFocus.y}%`,
+                    transform: `scale(${cropZoom})`
+                  }}
+                />
+                
+                {/* Guidelines grid overlay */}
+                <div className="absolute inset-0 border border-white/20 pointer-events-none flex flex-col justify-between">
+                  <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
+                  <div className="border-b border-dashed border-white/10 h-1/3 w-full" />
+                </div>
+
+                {/* Instruction Badge */}
+                <div className="absolute top-3 left-3 bg-black/60 backdrop-blur text-white px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1.5 pointer-events-none">
+                  <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                  Drag to reposition cover photo
+                </div>
+              </div>
+
+              {/* Profile Avatar simulation overlay (LinkedIn style) */}
+              <div className="absolute left-6 md:left-10 bottom-2 md:bottom-0 z-20 pointer-events-none">
+                <div className="w-16 h-16 md:w-24 md:h-24 rounded-full border-4 border-white dark:border-zinc-900 shadow-2xl bg-zinc-100 overflow-hidden">
+                  <Avatar src={avatarPreview} alt={formData.full_name || formData.username} className="w-full h-full object-cover" />
+                </div>
               </div>
             </div>
 
@@ -634,9 +694,9 @@ export function SettingsPage() {
             <div className="space-y-4">
               {/* Zoom Slider */}
               <div className="space-y-2">
-                <div className="flex justify-between text-xs font-semibold text-zinc-650 dark:text-zinc-400">
+                <div className="flex justify-between text-sm font-semibold text-zinc-650 dark:text-zinc-400">
                   <span>Zoom level</span>
-                  <span>{cropZoom.toFixed(2)}x</span>
+                  <span>{Math.round(cropZoom * 100)}%</span>
                 </div>
                 <input
                   type="range"
@@ -680,10 +740,6 @@ export function SettingsPage() {
                   />
                 </div>
               </div>
-
-              <p className="text-[10px] text-zinc-400 dark:text-zinc-550 text-center italic mt-1">
-                💡 Tip: Click and drag or touch-drag directly on the banner preview to reposition it!
-              </p>
             </div>
 
             {/* Action Buttons */}
