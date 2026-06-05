@@ -117,7 +117,7 @@ export function Layout() {
   }, [setSidebarOpen]);
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 w-full max-w-[100vw] overflow-x-hidden">
+    <div className="min-h-dvh bg-zinc-50 dark:bg-zinc-950 w-full max-w-[100vw] overflow-x-hidden">
       {/* Fixed Navbar */}
       <div className="fixed top-0 left-0 right-0 z-50">
         <Navbar />
@@ -144,7 +144,7 @@ export function Layout() {
       )}
 
       {/* Main Content Area - padded at bottom on mobile to prevent bottom nav bar overlap */}
-      <main className={`relative min-h-screen pt-12 sm:pt-14 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden ${
+      <main className={`relative min-h-dvh pt-12 sm:pt-14 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden ${
         location.pathname.startsWith('/profile/') ? 'lg:pl-0' : 'lg:pl-[260px]'
       }`}>
         {location.pathname.startsWith('/profile/') ? (

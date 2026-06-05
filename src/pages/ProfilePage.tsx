@@ -414,7 +414,7 @@ export function ProfilePage() {
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
-    <div className="w-full min-h-screen bg-zinc-50 dark:bg-zinc-900 pb-12">
+    <div className="w-full min-h-dvh bg-zinc-50 dark:bg-zinc-900 pb-12">
       {/* Cover Banner (Full width) */}
       <div className="relative h-[180px] sm:h-[220px] md:h-[280px] lg:h-[340px] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
         {coverUrl ? (
@@ -469,13 +469,13 @@ export function ProfilePage() {
       {/* Main Content (Centered layout with sidebar clearance) */}
       <div className="w-full lg:pl-[260px] relative z-10">
         <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0">
-          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-visible pb-8 -mt-8 sm:-mt-12 md:-mt-16 lg:-mt-20">
+          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-visible pb-8 mt-0 sm:-mt-12 md:-mt-16 lg:-mt-20">
             
             {/* Profile Content Area */}
             <div className="px-2 md:px-8 mt-4">
               
               {/* Avatar & Edit Button Row */}
-              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-12 sm:-mt-16 md:-mt-20 lg:-mt-24 mb-4 gap-4 relative z-10 px-4 md:px-8">
+              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-6 sm:-mt-16 md:-mt-20 lg:-mt-24 mb-4 gap-4 relative z-10 px-4 md:px-8">
                 <div className="relative mx-auto sm:mx-0">
                   <div className="w-[100px] h-[100px] sm:w-32 sm:h-32 md:w-36 md:h-36 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-xl flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
                     <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
