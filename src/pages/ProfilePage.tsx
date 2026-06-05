@@ -413,6 +413,73 @@ export function ProfilePage() {
     }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  const renderActionButtons = (isMobile: boolean) => {
+    const containerClasses = isMobile
+      ? 'flex flex-wrap items-center gap-2 w-full pt-1 pb-2'
+      : 'hidden sm:flex flex-wrap items-center justify-end gap-2 w-auto';
+
+    return (
+      <div className={containerClasses}>
+        {isOwnProfile ? (
+          <div className={`flex gap-2 w-full ${isMobile ? '' : 'sm:w-auto'}`}>
+            <Link to="/settings" className="flex-1 sm:flex-initial">
+              <Button variant="outline" className="w-full text-xs font-bold py-2 px-4 h-9 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl transition-all shadow-sm">
+                Edit Profile
+              </Button>
+            </Link>
+            <Button
+              variant="secondary"
+              onClick={handleShareProfile}
+              className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-805 dark:text-zinc-200 rounded-xl transition-all shadow-sm"
+            >
+              {shareCopied ? 'Copied!' : 'Share Profile'}
+            </Button>
+          </div>
+        ) : (
+          <div className={`flex flex-wrap items-center gap-2 w-full ${isMobile ? '' : 'sm:w-auto justify-end'}`}>
+            <Button
+              variant={isFollowing ? 'outline' : 'primary'}
+              className={`flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 rounded-xl transition-all shadow-sm ${
+                isFollowing ? 'border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300' : 'bg-orange-500 hover:bg-orange-600 text-white border-0'
+              }`}
+              loading={followLoading}
+              onClick={handleFollow}
+            >
+              {isFollowing ? 'Following' : 'Follow'}
+            </Button>
+            
+            {connectionState === 'request_received' ? (
+              <div className="flex gap-2 flex-1 sm:flex-initial">
+                <Button className="flex-1 sm:flex-initial text-xs font-bold py-2 px-3 h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
+                  Accept
+                </Button>
+                <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-3 h-9 border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm" loading={connectLoading} onClick={handleRejectConnectionRequest}>
+                  Reject
+                </Button>
+              </div>
+            ) : connectionState === 'connected' ? (
+              <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 border-zinc-200 dark:border-zinc-800 text-zinc-500 rounded-xl shadow-sm cursor-not-allowed" disabled>
+                Connected
+              </Button>
+            ) : connectionState === 'request_sent' ? (
+              <span className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 flex-1 sm:flex-initial h-9">
+                Pending
+              </span>
+            ) : (
+              <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-850 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={connectLoading} onClick={handleConnect}>
+                Connect
+              </Button>
+            )}
+            
+            <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-855 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={messageLoading} onClick={handleOpenConversation}>
+              Message
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full min-h-dvh bg-zinc-50 dark:bg-zinc-900 pb-12">
       {/* Cover Banner (Full width) */}
@@ -475,82 +542,25 @@ export function ProfilePage() {
             <div className="px-2 md:px-8 mt-4">
               
               {/* Avatar & Edit Button Row */}
-              <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end -mt-[45px] sm:-mt-[58px] md:-mt-[65px] mb-4 gap-4 relative z-10 px-4 md:px-8">
-                <div className="relative mx-auto sm:mx-0">
+              <div className="flex justify-between items-end -mt-[45px] sm:-mt-[58px] md:-mt-[65px] mb-4 relative z-10 px-4 md:px-8 w-full">
+                <div className="relative">
                   <div className="w-[100px] h-[100px] sm:w-32 sm:h-32 md:w-36 md:h-36 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-xl flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
                     <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
                   </div>
                 </div>
                 
-                {/* Action Buttons (Right-aligned next to avatar on desktop) */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full sm:w-auto">
-                  {isOwnProfile ? (
-                    <div className="flex gap-2 w-full sm:w-auto justify-center sm:justify-start">
-                      <Link to="/settings" className="flex-1 sm:flex-initial">
-                        <Button variant="outline" className="w-full text-xs font-bold py-2 px-4 h-9 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl transition-all shadow-sm">
-                          Edit Profile
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="secondary"
-                        onClick={handleShareProfile}
-                        className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-805 dark:text-zinc-200 rounded-xl transition-all shadow-sm"
-                      >
-                        {shareCopied ? 'Copied!' : 'Share Profile'}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full sm:w-auto">
-                      <Button
-                        variant={isFollowing ? 'outline' : 'primary'}
-                        className={`flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 rounded-xl transition-all shadow-sm ${
-                          isFollowing ? 'border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300' : 'bg-orange-500 hover:bg-orange-600 text-white border-0'
-                        }`}
-                        loading={followLoading}
-                        onClick={handleFollow}
-                      >
-                        {isFollowing ? 'Following' : 'Follow'}
-                      </Button>
-                      
-                      {connectionState === 'request_received' ? (
-                        <div className="flex gap-2 flex-1 sm:flex-initial">
-                          <Button className="flex-1 sm:flex-initial text-xs font-bold py-2 px-3 h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm" loading={connectLoading} onClick={handleAcceptConnectionRequest}>
-                            Accept
-                          </Button>
-                          <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-3 h-9 border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm" loading={connectLoading} onClick={handleRejectConnectionRequest}>
-                            Reject
-                          </Button>
-                        </div>
-                      ) : connectionState === 'connected' ? (
-                        <Button variant="outline" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 border-zinc-200 dark:border-zinc-800 text-zinc-500 rounded-xl shadow-sm cursor-not-allowed" disabled>
-                          Connected
-                        </Button>
-                      ) : connectionState === 'request_sent' ? (
-                        <span className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-semibold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 flex-1 sm:flex-initial h-9">
-                          Pending
-                        </span>
-                      ) : (
-                        <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-850 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={connectLoading} onClick={handleConnect}>
-                          Connect
-                        </Button>
-                      )}
-                      
-                      <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-855 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={messageLoading} onClick={handleOpenConversation}>
-                        Message
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                {/* Desktop Action Buttons (Hidden on mobile, right-aligned next to avatar on desktop) */}
+                {renderActionButtons(false)}
               </div>
 
               {/* Header Info */}
-              <div className="px-4 md:px-8 space-y-3 pt-1 sm:pt-0 text-center sm:text-left flex flex-col items-center sm:items-start">
+              <div className="px-4 md:px-8 space-y-3 pt-1 sm:pt-0 text-left flex flex-col items-start w-full">
                 {/* Name & Badge Row */}
-                <div className="space-y-1.5 flex flex-col items-center sm:items-start">
+                <div className="space-y-1.5 flex flex-col items-start">
                   <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight leading-tight">
                     {profile.full_name || profile.username}
                   </h1>
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-0.5">
+                  <div className="flex flex-wrap items-center justify-start gap-2 pt-0.5">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
                       Founder
                     </span>
@@ -574,7 +584,7 @@ export function ProfilePage() {
 
                 {/* Bio / Tagline */}
                 {(profile.headline || profile.bio) && (
-                  <p className="text-sm sm:text-base text-zinc-605 dark:text-zinc-400 leading-relaxed font-normal max-w-2xl text-center sm:text-left">
+                  <p className="text-sm sm:text-base text-zinc-605 dark:text-zinc-400 leading-relaxed font-normal max-w-2xl text-left">
                     {profile.headline || (profile.bio ? (profile.bio.length > 160 ? profile.bio.slice(0, 160) + '...' : profile.bio) : '')}
                   </p>
                 )}
@@ -588,7 +598,7 @@ export function ProfilePage() {
                   if (!showJoinDate && !showProductCount && !showActive) return null;
                   
                   return (
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3 w-full">
+                    <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3 w-full">
                       {showJoinDate && (
                         <span className="inline-flex items-center gap-1.5">
                           <span className="text-sm">🚀</span>
@@ -617,6 +627,9 @@ export function ProfilePage() {
                     </div>
                   );
                 })()}
+
+                {/* Mobile Action Buttons (Visible only on mobile) */}
+                {renderActionButtons(true)}
 
                 {/* Redesigned Premium Stats Cards */}
                 {(() => {
@@ -665,7 +678,7 @@ export function ProfilePage() {
 
                 {/* Social Links as modern pills */}
                 {profileLinks.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-2 justify-center sm:justify-start">
+                  <div className="flex flex-wrap gap-2 pt-2 justify-start">
                     {profileLinks.map((item) => {
                       const Icon = item.icon;
                       return (
