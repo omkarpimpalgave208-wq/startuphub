@@ -1,15 +1,12 @@
-import { useUIStore } from '../store/uiStore';
 import logo from '../assets/startuphub-logo.png';
 
 export function Logo({ className, showTextOnMobile = true }: { className?: string; showTextOnMobile?: boolean }) {
-  const { darkMode } = useUIStore();
-
   return (
     <div className={`flex items-center gap-2 ${className ?? ''}`}>
       <img
         src={logo}
         alt="StartupHub Logo"
-        className="w-7 h-7 sm:w-8.5 sm:h-8.5 flex-shrink-0 object-contain transition-transform hover:scale-105 duration-200"
+        className="w-[34px] h-[34px] sm:w-[42px] sm:h-[42px] flex-shrink-0 object-contain transition-transform hover:scale-105 duration-200"
       />
 
       <span

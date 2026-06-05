@@ -482,89 +482,107 @@ export function ProfilePage() {
 
   return (
     <div className="w-full min-h-dvh bg-zinc-50 dark:bg-zinc-900 pb-12">
-      {/* Cover Banner (Full width) */}
-      <div className="relative h-[180px] sm:h-[220px] md:h-[280px] lg:h-[340px] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
-        {coverUrl ? (
-          <>
-            {/* Blurred background layer under the cover to improve aesthetics */}
-            <img
-              src={coverUrl}
-              alt=""
-              className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-60 scale-110 pointer-events-none"
-              aria-hidden="true"
-            />
-            {/* Main cover image, centered and contained to show the entire uploaded image without stretching */}
-            <img
-              src={coverUrl}
-              alt="Profile cover"
-              className="relative z-20 h-full w-full object-contain block mx-auto"
-              loading="lazy"
-            />
-          </>
-        ) : (
-          <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
-        )}
-        {/* Dark overlay for cover image readability */}
-        <div className="absolute inset-0 bg-black/35 backdrop-brightness-75 z-10" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.3))] z-10" />
-        
-        {/* Overlaid Controls (Floating) */}
-        <div className="absolute inset-x-0 top-4 z-30 pointer-events-none">
-          <div className="max-w-6xl mx-auto px-4 md:px-6 w-full flex items-center justify-between pointer-events-auto">
-            {/* Back Arrow link */}
-            <Link
-              to="/"
-              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/55 border border-white/10 text-white backdrop-blur-md hover:bg-black/75 active:scale-95 transition-all shadow-lg"
-              aria-label="Back to feed"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
 
-            {/* Change Cover button */}
-            {isOwnProfile && (
+      {/* ─── Cover + Avatar wrapper ─────────────────────────────────────────── */}
+      {/* Avatar is a sibling of the cover, positioned absolutely so it can
+          overlap the bottom edge by 50% without any overflow-hidden clipping.  */}
+      <div className="relative w-full" style={{ marginBottom: 0 }}>
+
+        {/* Cover Banner */}
+        <div
+          className="relative w-full overflow-hidden bg-zinc-950"
+          style={{ height: 'clamp(220px, 35vh, 320px)' }}
+        >
+          {coverUrl ? (
+            <>
+              {/* Subtle blurred background fill */}
+              <img
+                src={coverUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover blur-2xl opacity-50 scale-110 pointer-events-none"
+                aria-hidden="true"
+              />
+              {/* Main cover — object-cover for full bleed, center crop */}
+              <img
+                src={coverUrl}
+                alt="Profile cover"
+                className="absolute inset-0 h-full w-full object-cover object-center"
+                loading="lazy"
+              />
+            </>
+          ) : (
+            <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
+          )}
+
+          {/* Gradient overlay — bottom fade so avatar area reads cleanly */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40 z-10 pointer-events-none" />
+
+          {/* Floating controls */}
+          <div className="absolute inset-x-0 top-4 z-20">
+            <div className="max-w-5xl mx-auto px-4 md:px-6 w-full flex items-center justify-between">
               <Link
-                to="/settings"
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-black/75 active:scale-95 transition-all shadow-lg"
+                to="/"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/50 border border-white/15 text-white backdrop-blur-sm hover:bg-black/70 active:scale-95 transition-all shadow-md"
+                aria-label="Back to feed"
               >
-                <span>Edit Cover</span>
+                <ArrowLeft className="w-4 h-4" />
               </Link>
-            )}
+
+              {isOwnProfile && (
+                <Link
+                  to="/settings"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm hover:bg-black/70 active:scale-95 transition-all shadow-md"
+                >
+                  <span>Edit Cover</span>
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Avatar — anchored to the bottom of the cover, overlapping 50% */}
+        {/* z-20 keeps it above the cover; the wrapper has no overflow-hidden  */}
+        <div className="absolute bottom-0 translate-y-1/2 left-0 right-0 z-20 pointer-events-none">
+          <div className="w-full lg:pl-[260px]">
+            <div className="w-full max-w-5xl mx-auto px-4 md:px-6">
+              <div
+                className="w-[88px] h-[88px] sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full border-4 border-white dark:border-zinc-950 shadow-xl bg-zinc-100 dark:bg-zinc-800 overflow-hidden pointer-events-auto flex-shrink-0"
+              >
+                <Avatar
+                  src={profile.avatar_url}
+                  alt={profile.full_name || profile.username}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
+      {/* End cover+avatar wrapper */}
 
-      {/* Main Content (Centered layout with sidebar clearance) */}
+      {/* ─── Main Content ───────────────────────────────────────────────────── */}
       <div className="w-full lg:pl-[260px] relative z-10">
-        <div className="w-full max-w-none md:max-w-6xl md:mx-auto px-0 md:px-6 py-0">
-          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-2xl overflow-visible pb-8 mt-0 sm:-mt-12 md:-mt-16 lg:-mt-20">
-            
-            {/* Profile Content Area */}
-            <div className="px-2 md:px-8 mt-4">
-              
-              {/* Avatar & Edit Button Row */}
-              <div className="flex justify-between items-end -mt-[45px] sm:-mt-[58px] md:-mt-[65px] mb-4 relative z-10 px-4 md:px-8 w-full">
-                <div className="relative">
-                  <div className="w-[100px] h-[100px] sm:w-32 sm:h-32 md:w-36 md:h-36 overflow-hidden rounded-full border-4 border-white dark:border-zinc-950 shadow-xl flex-shrink-0 bg-zinc-100 dark:bg-zinc-800">
-                    <Avatar src={profile.avatar_url} alt={profile.full_name || profile.username} className="w-full h-full object-cover" />
-                  </div>
-                </div>
-                
-                {/* Desktop Action Buttons (Hidden on mobile, right-aligned next to avatar on desktop) */}
-                {renderActionButtons(false)}
-              </div>
+        <div className="w-full max-w-5xl mx-auto px-0 md:px-6">
+          <div className="w-full bg-white dark:bg-zinc-950 rounded-none md:rounded-3xl border-0 md:border border-zinc-200 dark:border-zinc-800 shadow-none md:shadow-xl overflow-visible pb-8">
 
-              {/* Header Info */}
-              <div className="px-4 md:px-8 space-y-3 pt-1 sm:pt-0 text-left flex flex-col items-start w-full">
-                {/* Name & Badge Row */}
-                <div className="space-y-1.5 flex flex-col items-start">
-                  <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight leading-tight">
+            {/* Spacer equal to the half-avatar height so content starts below avatar */}
+            <div className="h-[44px] sm:h-[56px] md:h-[64px]" aria-hidden="true" />
+
+            {/* Profile Content Area */}
+            <div className="px-4 md:px-8">
+
+              {/* Name + Action Buttons row */}
+              <div className="flex items-start justify-between gap-3 mb-3">
+                {/* Name block — sits flush after the spacer */}
+                <div className="space-y-1 flex flex-col items-start min-w-0">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight leading-tight truncate max-w-[260px] sm:max-w-none">
                     {profile.full_name || profile.username}
                   </h1>
-                  <div className="flex flex-wrap items-center justify-start gap-2 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
                       Founder
                     </span>
-                    
+
                     {/* Online Status Badge */}
                     <div className="flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 px-2.5 py-0.5 text-[10px] dark:bg-zinc-900/50">
                       <span className="relative flex h-1.5 w-1.5">
@@ -573,136 +591,139 @@ export function ProfilePage() {
                         )}
                         <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${isUserOnline(profile.last_seen) ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
                       </span>
-                      <span className="font-semibold text-zinc-550 dark:text-zinc-400">
+                      <span className="font-semibold text-zinc-500 dark:text-zinc-400">
                         {isUserOnline(profile.last_seen) ? 'Active now' : formatLastSeen(profile.last_seen)}
                       </span>
                     </div>
                   </div>
-                  
                   <p className="text-xs sm:text-sm font-semibold text-zinc-400 dark:text-zinc-500">@{profile.username}</p>
                 </div>
 
-                {/* Bio / Tagline */}
-                {(profile.headline || profile.bio) && (
-                  <p className="text-sm sm:text-base text-zinc-605 dark:text-zinc-400 leading-relaxed font-normal max-w-2xl text-left">
-                    {profile.headline || (profile.bio ? (profile.bio.length > 160 ? profile.bio.slice(0, 160) + '...' : profile.bio) : '')}
-                  </p>
-                )}
-
-                {/* Founder Credibility Strip */}
-                {(() => {
-                  const showJoinDate = profile.created_at;
-                  const showProductCount = products.length > 0;
-                  const showActive = profile.last_seen;
-                  
-                  if (!showJoinDate && !showProductCount && !showActive) return null;
-                  
-                  return (
-                    <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3 w-full">
-                      {showJoinDate && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="text-sm">🚀</span>
-                          <span>Founder since <strong className="text-zinc-700 dark:text-zinc-300 font-semibold">{new Date(profile.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}</strong></span>
-                        </span>
-                      )}
-                      {showJoinDate && showProductCount && <span className="text-zinc-300 dark:text-zinc-800 hidden sm:inline">&bull;</span>}
-                      {showProductCount && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="text-sm">📦</span>
-                          <span><strong className="text-zinc-700 dark:text-zinc-300 font-semibold">{products.length}</strong> {products.length === 1 ? 'Product' : 'Products'} launched</span>
-                        </span>
-                      )}
-                      {((showJoinDate || showProductCount) && showActive) && <span className="text-zinc-300 dark:text-zinc-800 hidden sm:inline">&bull;</span>}
-                      {showActive && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="text-sm">🔥</span>
-                          <span>Active recently</span>
-                        </span>
-                      )}
-                      <span className="text-zinc-300 dark:text-zinc-800 hidden sm:inline">&bull;</span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="text-sm">⭐</span>
-                        <span>Early Community Member</span>
-                      </span>
-                    </div>
-                  );
-                })()}
-
-                {/* Mobile Action Buttons (Visible only on mobile) */}
-                {renderActionButtons(true)}
-
-                {/* Redesigned Premium Stats Cards */}
-                {(() => {
-                  const totalUpvotes = products.reduce((acc, p) => acc + (p.upvote_count || 0), 0);
-                  let reputation = 'New';
-                  if (totalUpvotes >= 50) {
-                    reputation = 'Elite';
-                  } else if (totalUpvotes >= 10 || products.length > 1) {
-                    reputation = 'Rising Star';
-                  } else if (products.length > 0 || (profile.connections || 0) > 2) {
-                    reputation = 'Active';
-                  }
-
-                  return (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 w-full">
-                      {[
-                        { label: 'Products', value: products.length || 0, icon: '🚀', id: 'products-section' },
-                        { label: 'Connections', value: profile.connections || 0, icon: '🤝', id: 'connection-requests-section' },
-                        { label: 'Posts', value: discussions.length || 0, icon: '📝', id: 'timeline-section' },
-                        { label: 'Reputation', value: reputation, icon: '⭐', id: 'about-section' }
-                      ].map((stat) => (
-                        <div
-                          key={stat.label}
-                          onClick={() => {
-                            const targetId = stat.label === 'Posts' ? 'timeline-section' : stat.id;
-                            const targetElement = document.getElementById(targetId);
-                            if (targetElement) {
-                              targetElement.scrollIntoView({ behavior: 'smooth' });
-                            }
-                          }}
-                          className="flex flex-col items-center justify-center text-center p-4 rounded-2xl border border-zinc-150 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm hover:shadow-md hover:border-orange-500/30 dark:hover:border-orange-500/25 transition-all duration-200 cursor-pointer group w-full relative overflow-hidden"
-                        >
-                          <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-br from-zinc-500/5 to-transparent rounded-bl-full pointer-events-none" />
-                          <span className="text-lg mb-1">{stat.icon}</span>
-                          <span className="text-[10px] sm:text-xs font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wider">
-                            {stat.label}
-                          </span>
-                          <span className="text-lg sm:text-xl font-black text-zinc-900 dark:text-white mt-0.5 group-hover:text-orange-500 transition-colors">
-                            {stat.value}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {/* Social Links as modern pills */}
-                {profileLinks.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-2 justify-start">
-                    {profileLinks.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <a
-                          key={item.label}
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3.5 py-1.5 text-xs font-medium text-zinc-650 dark:text-zinc-350 hover:border-orange-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all shadow-sm"
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                          <span>{item.label}</span>
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Desktop Action Buttons */}
+                {renderActionButtons(false)}
               </div>
 
-              {actionMessage && (
-                <div className="mx-4 md:mx-8 mt-4 rounded-xl border border-orange-300/40 bg-orange-50/80 px-4 py-3 text-sm text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
-                  {actionMessage}
+              {/* Bio / Tagline */}
+              {(profile.headline || profile.bio) && (
+                <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 leading-relaxed font-normal max-w-2xl text-left mb-4">
+                  {profile.headline || (profile.bio ? (profile.bio.length > 160 ? profile.bio.slice(0, 160) + '...' : profile.bio) : '')}
+                </p>
+              )}
+
+              {/* Founder Credibility Strip */}
+              {(() => {
+                const showJoinDate = profile.created_at;
+                const showProductCount = products.length > 0;
+                const showActive = profile.last_seen;
+
+                if (!showJoinDate && !showProductCount && !showActive) return null;
+
+                return (
+                  <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-900/60 pt-3 mb-4 w-full">
+                    {showJoinDate && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-sm">🚀</span>
+                        <span>Founder since <strong className="text-zinc-700 dark:text-zinc-300 font-semibold">{new Date(profile.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}</strong></span>
+                      </span>
+                    )}
+                    {showJoinDate && showProductCount && <span className="text-zinc-300 dark:text-zinc-800 hidden sm:inline">&bull;</span>}
+                    {showProductCount && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-sm">📦</span>
+                        <span><strong className="text-zinc-700 dark:text-zinc-300 font-semibold">{products.length}</strong> {products.length === 1 ? 'Product' : 'Products'} launched</span>
+                      </span>
+                    )}
+                    {((showJoinDate || showProductCount) && showActive) && <span className="text-zinc-300 dark:text-zinc-800 hidden sm:inline">&bull;</span>}
+                    {showActive && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-sm">🔥</span>
+                        <span>Active recently</span>
+                      </span>
+                    )}
+                    <span className="text-zinc-300 dark:text-zinc-800 hidden sm:inline">&bull;</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="text-sm">⭐</span>
+                      <span>Early Community Member</span>
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Mobile Action Buttons */}
+              {renderActionButtons(true)}
+
+              {/* Stats Cards */}
+              {(() => {
+                const totalUpvotes = products.reduce((acc, p) => acc + (p.upvote_count || 0), 0);
+                let reputation = 'New';
+                if (totalUpvotes >= 50) {
+                  reputation = 'Elite';
+                } else if (totalUpvotes >= 10 || products.length > 1) {
+                  reputation = 'Rising Star';
+                } else if (products.length > 0 || (profile.connections || 0) > 2) {
+                  reputation = 'Active';
+                }
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 w-full">
+                    {[
+                      { label: 'Products', value: products.length || 0, icon: '🚀', id: 'products-section' },
+                      { label: 'Connections', value: profile.connections || 0, icon: '🤝', id: 'connection-requests-section' },
+                      { label: 'Posts', value: discussions.length || 0, icon: '📝', id: 'timeline-section' },
+                      { label: 'Reputation', value: reputation, icon: '⭐', id: 'about-section' }
+                    ].map((stat) => (
+                      <div
+                        key={stat.label}
+                        onClick={() => {
+                          const targetId = stat.label === 'Posts' ? 'timeline-section' : stat.id;
+                          const targetElement = document.getElementById(targetId);
+                          if (targetElement) {
+                            targetElement.scrollIntoView({ behavior: 'smooth' });
+                          }
+                        }}
+                        className="flex flex-col items-center justify-center text-center p-4 rounded-2xl border border-zinc-150 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm hover:shadow-md hover:border-orange-500/30 dark:hover:border-orange-500/25 transition-all duration-200 cursor-pointer group w-full relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-br from-zinc-500/5 to-transparent rounded-bl-full pointer-events-none" />
+                        <span className="text-lg mb-1">{stat.icon}</span>
+                        <span className="text-[10px] sm:text-xs font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wider">
+                          {stat.label}
+                        </span>
+                        <span className="text-lg sm:text-xl font-black text-zinc-900 dark:text-white mt-0.5 group-hover:text-orange-500 transition-colors">
+                          {stat.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* Social Links */}
+              {profileLinks.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-3 justify-start">
+                  {profileLinks.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <a
+                        key={item.label}
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3.5 py-1.5 text-xs font-medium text-zinc-650 dark:text-zinc-350 hover:border-orange-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all shadow-sm"
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{item.label}</span>
+                      </a>
+                    );
+                  })}
                 </div>
               )}
+            </div>
+
+            {actionMessage && (
+              <div className="mx-4 md:mx-8 mt-4 rounded-xl border border-orange-300/40 bg-orange-50/80 px-4 py-3 text-sm text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
+                {actionMessage}
+              </div>
+            )}
 
               {/* Connection requests section with clean empty states */}
               {isOwnProfile && (
@@ -1031,6 +1052,5 @@ export function ProfilePage() {
           </div>
         </div>
       </div>
-    </div>
   );
 }
