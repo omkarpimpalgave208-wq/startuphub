@@ -23,6 +23,8 @@ export function SettingsPage() {
   const { user, profile, fetchProfile } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [bannerPreview, setBannerPreview] = useState<string>('');
   const [bannerStyle, setBannerStyle] = useState<string>('gradient-1');
@@ -221,6 +223,8 @@ export function SettingsPage() {
     if (!user) return;
 
     setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
     try {
       const skillsArray = formData.skills
         ? formData.skills.split(',').map((s) => s.trim()).filter(Boolean)
@@ -246,35 +250,15 @@ export function SettingsPage() {
 
       await api.updateProfile(user.id, payload as any);
       await fetchProfile(user.id);
-    } catch (err) {
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
       console.error('Save settings error:', err);
+      setSaveError(err?.message || 'Failed to save changes. Please try again.');
     } finally {
       setSaving(false);
     }
   };
-
-  // Calculate boundary clamping to prevent empty spaces inside the crop area
-  const getFocusBounds = () => {
-    const container = containerRef.current;
-    if (!container || !imageDims.width || !imageDims.height) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
-    
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    
-    const { width: imgDispWidth, height: imgDispHeight } = getDisplayedImageSize(containerWidth, containerHeight);
-    if (imgDispWidth <= 0 || imgDispHeight <= 0) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
-
-    const minX = (containerWidth / (2 * imgDispWidth)) * 100;
-    const maxX = 100 - minX;
-    const minY = (containerHeight / (2 * imgDispHeight)) * 100;
-    const maxY = 100 - minY;
-
-    return { minX, maxX, minY, maxY };
-  };
-
-  const { minX, maxX, minY, maxY } = getFocusBounds();
-  const clampedX = Math.max(minX, Math.min(maxX, cropFocus.x));
-  const clampedY = Math.max(minY, Math.min(maxY, cropFocus.y));
 
   if (!user) {
     return (
@@ -505,14 +489,26 @@ export function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-zinc-200 dark:border-zinc-800">
-            <Button
-              type="submit"
-              variant="primary"
-              loading={saving}
-            >
-              Save Changes
-            </Button>
+          <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+            {saveError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30 p-3 text-sm text-red-700 dark:text-red-400">
+                ✗ {saveError}
+              </div>
+            )}
+            {saveSuccess && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+                ✓ Profile saved successfully!
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                variant="primary"
+                loading={saving}
+              >
+                Save Changes
+              </Button>
+            </div>
           </div>
         </form>
       </div>
