@@ -23,6 +23,7 @@ export interface Profile {
   }>;
   college_name?: string | null;
   studying_year?: string | null;
+  last_seen?: string | null;
   products?: number;
   followers?: number;
   following?: number;

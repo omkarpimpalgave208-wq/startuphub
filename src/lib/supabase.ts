@@ -42,6 +42,9 @@ export interface ProfileRow {
   skills: string[];
   achievements: string[];
   experience: Array<{ role: string; company: string; period: string; description: string }>;
+  college_name: string | null;
+  studying_year: string | null;
+  last_seen: string | null;
   created_at: string;
   updated_at: string;
 }

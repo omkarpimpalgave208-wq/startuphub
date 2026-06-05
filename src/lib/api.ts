@@ -1034,15 +1034,31 @@ export const api = {
   },
 
   async updateProfile(userId: string, updates: Partial<Profile>): Promise<Profile> {
+    // Only send columns that are known to exist in the database schema.
+    // This prevents "Could not find column in schema cache" errors when the
+    // caller accidentally passes extra keys or future type fields not yet migrated.
+    const ALLOWED_PROFILE_COLUMNS = new Set([
+      'username', 'full_name', 'avatar_url', 'headline', 'bio',
+      'website', 'website_url', 'github_url', 'twitter_url', 'linkedin_url',
+      'location', 'banner_url', 'banner_style',
+      'skills', 'achievements', 'experience',
+      'college_name', 'studying_year',
+      'last_seen',
+    ]);
+
+    const safeUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([key]) => ALLOWED_PROFILE_COLUMNS.has(key))
+    );
+
     const { data, error } = await supabase
       .from('profiles')
-      .update(updates)
+      .update(safeUpdates)
       .eq('id', userId)
       .select()
       .single();
 
     if (error) throw error;
-    return data as unknown as Profile;
+    return this.normalizeProfileRow(data as Record<string, unknown>);
   },
 
   async getProfiles(limit = 50): Promise<Profile[]> {
