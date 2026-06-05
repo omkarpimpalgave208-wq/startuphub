@@ -35,6 +35,7 @@ export function SettingsPage() {
   const [selectedBannerFile, setSelectedBannerFile] = useState<File | null>(null);
   const [cropPreviewUrl, setCropPreviewUrl] = useState<string>('');
   const [cropZoom, setCropZoom] = useState(1);
+  const [zoomMinLimit, setZoomMinLimit] = useState(1);
   const [cropFocus, setCropFocus] = useState({ x: 50, y: 50 });
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -169,13 +170,36 @@ export function SettingsPage() {
       return;
     }
 
-    // Instead of immediately uploading, open the crop editor modal
-    setSelectedBannerFile(file);
+    // Instead of immediately uploading, open the crop editor modal with computed scale
     const objectUrl = URL.createObjectURL(file);
-    setCropPreviewUrl(objectUrl);
-    setCropZoom(1);
-    setCropFocus({ x: 50, y: 50 });
-    setCropModalOpen(true);
+    const img = new Image();
+    img.src = objectUrl;
+    img.onload = () => {
+      const imgWidth = img.naturalWidth || img.width;
+      const imgHeight = img.naturalHeight || img.height;
+      const imgAspect = imgWidth / imgHeight;
+      const containerAspect = 4; // 4:1
+
+      let initialZoom = 1;
+      if (imgAspect > containerAspect) {
+        // Image is wider than container: fit to width
+        initialZoom = containerAspect / imgAspect;
+      } else {
+        // Image is taller than container: fit to height
+        initialZoom = imgAspect / containerAspect;
+      }
+
+      setSelectedBannerFile(file);
+      setCropPreviewUrl(objectUrl);
+      setCropZoom(initialZoom);
+      setZoomMinLimit(initialZoom);
+      setCropFocus({ x: 50, y: 50 });
+      setCropModalOpen(true);
+    };
+    img.onerror = () => {
+      setBannerMessage('Failed to load image for cropping.');
+      URL.revokeObjectURL(objectUrl);
+    };
   };
 
   const fetchImageAsFile = async (url: string, filename: string) => {
@@ -193,20 +217,42 @@ export function SettingsPage() {
     setBannerMessage('Preparing cover photo for repositioning...');
     try {
       const file = await fetchImageAsFile(bannerPreview, 'current-banner.jpg');
-      setSelectedBannerFile(file);
-      setCropPreviewUrl(bannerPreview);
+      const objectUrl = bannerPreview;
       
-      const storedZoom = localStorage.getItem(PROFILE_COVER_ZOOM_KEY(user.id));
-      const storedFocus = localStorage.getItem(PROFILE_COVER_FOCUS_KEY(user.id));
-      
-      setCropZoom(storedZoom ? Number(storedZoom) : 1);
-      setCropFocus(storedFocus ? JSON.parse(storedFocus) : { x: 50, y: 50 });
-      setCropModalOpen(true);
-      setBannerMessage('');
+      const img = new Image();
+      img.src = objectUrl;
+      img.onload = () => {
+        const imgWidth = img.naturalWidth || img.width;
+        const imgHeight = img.naturalHeight || img.height;
+        const imgAspect = imgWidth / imgHeight;
+        const containerAspect = 4; // 4:1
+
+        let initialZoom = 1;
+        if (imgAspect > containerAspect) {
+          initialZoom = containerAspect / imgAspect;
+        } else {
+          initialZoom = imgAspect / containerAspect;
+        }
+
+        setSelectedBannerFile(file);
+        setCropPreviewUrl(objectUrl);
+        setZoomMinLimit(initialZoom);
+
+        const storedZoom = localStorage.getItem(PROFILE_COVER_ZOOM_KEY(user.id));
+        const storedFocus = localStorage.getItem(PROFILE_COVER_FOCUS_KEY(user.id));
+
+        setCropZoom(storedZoom ? Number(storedZoom) : initialZoom);
+        setCropFocus(storedFocus ? JSON.parse(storedFocus) : { x: 50, y: 50 });
+        setCropModalOpen(true);
+        setBannerMessage('');
+        setLoading(false);
+      };
+      img.onerror = () => {
+        throw new Error('Failed to load image dimensions.');
+      };
     } catch (err: any) {
       console.error('Failed to prepare banner for repositioning:', err);
       setBannerMessage('Unable to prepare current banner. Please try uploading the image file again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -696,13 +742,13 @@ export function SettingsPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm font-semibold text-zinc-650 dark:text-zinc-400">
                   <span>Zoom level</span>
-                  <span>{Math.round(cropZoom * 100)}%</span>
+                  <span>{Math.round((cropZoom / zoomMinLimit) * 100)}%</span>
                 </div>
                 <input
                   type="range"
-                  min={1}
-                  max={3}
-                  step={0.05}
+                  min={zoomMinLimit}
+                  max={Math.max(3, zoomMinLimit * 3)}
+                  step={0.01}
                   value={cropZoom}
                   onChange={(e) => setCropZoom(Number(e.target.value))}
                   className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-orange-500 dark:bg-zinc-800"
