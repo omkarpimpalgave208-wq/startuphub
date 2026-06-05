@@ -1046,19 +1046,56 @@ export const api = {
       'last_seen',
     ]);
 
-    const safeUpdates = Object.fromEntries(
+    let safeUpdates = Object.fromEntries(
       Object.entries(updates).filter(([key]) => ALLOWED_PROFILE_COLUMNS.has(key))
     );
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .update(safeUpdates)
-      .eq('id', userId)
-      .select()
-      .single();
+    // Self-healing retry: if Supabase returns a schema-cache error for a specific
+    // column (e.g. studying_year migration not yet applied), strip that column and
+    // retry so the rest of the profile still saves successfully.
+    const MAX_RETRIES = ALLOWED_PROFILE_COLUMNS.size;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(safeUpdates)
+        .eq('id', userId)
+        .select()
+        .single();
 
-    if (error) throw error;
-    return this.normalizeProfileRow(data as Record<string, unknown>);
+      if (!error) {
+        return this.normalizeProfileRow(data as Record<string, unknown>);
+      }
+
+      // Check whether this is a schema-cache "column not found" error
+      const isSchemaError =
+        error.message?.includes('Could not find') ||
+        error.message?.includes('schema cache') ||
+        error.code === 'PGRST204';
+
+      if (isSchemaError) {
+        // Extract the offending column name from the error message
+        // e.g. "Could not find the 'studying_year' column of 'profiles'"
+        const match = error.message?.match(/Could not find the '([^']+)' column/);
+        const badColumn = match?.[1];
+
+        if (badColumn && safeUpdates[badColumn] !== undefined) {
+          console.warn(
+            `[api.updateProfile] Column '${badColumn}' not found in DB schema – ` +
+            `stripping from payload and retrying. ` +
+            `Run the migration to permanently fix this: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS ${badColumn} text;`
+          );
+          const { [badColumn]: _dropped, ...rest } = safeUpdates;
+          safeUpdates = rest;
+          continue; // retry without the bad column
+        }
+      }
+
+      // Non-schema error or no column to strip — throw immediately
+      throw error;
+    }
+
+    // Should never reach here; throw a descriptive error just in case
+    throw new Error('[api.updateProfile] Exceeded max retries stripping schema-missing columns.');
   },
 
   async getProfiles(limit = 50): Promise<Profile[]> {
