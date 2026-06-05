@@ -74,12 +74,12 @@ export function SettingsPage() {
       }
       const storedCover = localStorage.getItem(PROFILE_COVER_KEY(profile.id));
       const storedCoverStyle = localStorage.getItem(PROFILE_COVER_STYLE_KEY(profile.id));
-      if (storedCover) {
-        setBannerPreview(storedCover);
-      }
-      if (storedCoverStyle) {
-        setBannerStyle(storedCoverStyle);
-      }
+      
+      const dbCover = profile.banner_url || storedCover || '';
+      const dbStyle = profile.banner_style || storedCoverStyle || 'gradient-1';
+      
+      setBannerPreview(dbCover);
+      setBannerStyle(dbStyle);
 
       // Load zoom and position metadata (database takes precedence)
       const zoomVal = profile.banner_zoom !== null && profile.banner_zoom !== undefined
@@ -235,7 +235,7 @@ export function SettingsPage() {
       }
 
       setBannerMessage('Uploading cover photo...');
-      const publicUrl = await api.uploadFile(fileToUpload, 'covers');
+      const publicUrl = await api.uploadFile(fileToUpload, 'banners');
       setBannerPreview(publicUrl);
 
       // Smart default focal point (50% horizontal, 35% vertical)
