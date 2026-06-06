@@ -151,3 +151,17 @@ export interface Bookmark {
   created_at: string;
   products?: Product;
 }
+
+export interface VerificationRequest {
+  id: number;
+  user_id: string;
+  verification_type: 'student' | 'founder';
+  status: 'pending' | 'approved' | 'rejected';
+  college_name: string | null;
+  startup_name: string | null;
+  document_url: string | null;
+  website_url?: string | null;
+  notes?: string | null;
+  created_at: string;
+  reviewed_at?: string | null;
+}

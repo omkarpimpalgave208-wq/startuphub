@@ -5,8 +5,9 @@ import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
-import { Avatar } from '../components/ui/Avatar';
 import { VerificationSection } from '../components/VerificationSection';
+import { Avatar } from '../components/ui/Avatar';
+import { api } from '../lib/api';
 import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
 import { CoverEditorModal } from '../components/CoverEditorModal';
 import { BannerImage } from '../components/BannerImage';
@@ -375,140 +376,11 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="w-full max-w-none min-w-0 md:max-w-3xl md:mx-auto px-4 md:px-0">
-      <h1 className="text-2xl font-bold text-zinc-900 dark:text-white mb-6">
-        Settings
-      </h1>
-
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8">
-        {/* Avatar panel */}
-        <div className="flex items-center gap-6 mb-8">
-          <div className="relative">
-            <Avatar
-              src={avatarPreview}
-              alt={formData.full_name || formData.username}
-              size="xl"
-            />
-            {loading ? (
-              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center">
-                <Loader2 className="w-5 h-5 text-white animate-spin" />
-              </div>
-            ) : (
-              <label className="absolute -bottom-1 -right-1 p-2 bg-orange-500 text-white rounded-full cursor-pointer hover:bg-orange-600 transition-colors">
-                <Camera className="w-4 h-4" />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarChange}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
-          <div>
-            <h3 className="font-medium text-zinc-900 dark:text-white">Profile Photo</h3>
-            <p className="text-sm text-zinc-500">JPG, PNG, WebP, GIF, or SVG. Auto-compresses large files to 1MB.</p>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950/40 p-5 mb-6">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h3 className="font-medium text-zinc-900 dark:text-white">Cover Photo</h3>
-              <p className="text-sm text-zinc-500">Upload a cover image (min-width: 1500px, recommended: 2000×500) or choose a premium gradient banner.</p>
-            </div>
-            <div className="flex gap-2 flex-shrink-0">
-              {bannerPreview && (
-                <Button type="button" variant="outline" onClick={() => setIsEditorOpen(true)}>
-                  Reposition Cover
-                </Button>
-              )}
-              <Button type="button" variant="outline" onClick={async () => {
-                setBannerPreview('');
-                saveCoverState(null, bannerStyle);
-                if (user) {
-                  try {
-                    await api.updateProfile(user.id, { banner_url: null });
-                    await fetchProfile(user.id);
-                  } catch (err) {
-                    console.error('[SettingsPage] Reset banner in DB failed:', err);
-                  }
-                }
-              }}>
-                Reset Cover
-              </Button>
-            </div>
-          </div>
-
-          <div
-            className={`group relative overflow-hidden rounded-3xl border-2 ${
-              dragActive ? 'border-orange-400 bg-orange-50/80 dark:bg-orange-500/10' : 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950'
-            } p-6 text-center transition`}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-          >
-            {bannerPreview ? (
-              <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-955 relative flex items-center justify-center border border-zinc-200 dark:border-zinc-800">
-                <BannerImage
-                  src={bannerPreview}
-                  zoom={bannerZoom}
-                  positionX={bannerPositionX}
-                  positionY={bannerPositionY}
-                  alt="Cover preview"
-                />
-              </div>
-            ) : (
-              <div className={`mx-auto h-48 w-full rounded-3xl bg-gradient-to-br ${coverStyles.find((style) => style.id === bannerStyle)?.className ?? coverStyles[0].className}`} />
-            )}
-            <div className={`pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-sm opacity-90 ${
-              bannerPreview
-                ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                : 'text-zinc-700 dark:text-zinc-300'
-            }`}>
-              <p className="font-semibold">Drag & drop a cover image here</p>
-              <p>or upload a JPG, PNG, WebP file up to 4MB.</p>
-            </div>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={onBannerInputChange}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-          </div>
-
-          {bannerMessage && (
-            <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950/40 p-3 text-sm text-zinc-700 dark:text-zinc-200">
-              {bannerMessage}
-            </div>
-          )}
-
-          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {coverStyles.map((style) => (
-              <button
-                key={style.id}
-                type="button"
-                onClick={() => handleStyleChange(style.id)}
-                className={`rounded-3xl border p-3 text-left transition ${
-                  bannerStyle === style.id
-                    ? 'border-orange-400 bg-orange-50 dark:border-orange-400 dark:bg-orange-500/10'
-                    : 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
-                }`}
-              >
-                <div className={`h-20 rounded-2xl bg-gradient-to-br ${style.className}`} />
-                <p className="mt-3 text-sm font-medium text-zinc-900 dark:text-white">{style.label}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {uploadMessage && (
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950/40 p-3 text-sm text-zinc-700 dark:text-zinc-200 mb-6">
-            {uploadMessage}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="max-w-3xl mx-auto space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white mb-6">Profile Details</h2>
+          
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Username"
@@ -626,22 +498,21 @@ export function SettingsPage() {
                 Save Changes
               </Button>
             </div>
+            </div>
           </div>
         </form>
+        {/* Cover Position Editor Modal */}
+        {bannerPreview && (
+          <CoverEditorModal
+            isOpen={isEditorOpen}
+            onClose={() => setIsEditorOpen(false)}
+            imageUrl={bannerPreview}
+            initialZoom={bannerZoom}
+            initialPositionX={bannerPositionX}
+            initialPositionY={bannerPositionY}
+            onSave={handleSaveCoverPosition}
+          />
+        )}
       </div>
-
-      {/* Cover Position Editor Modal */}
-      {bannerPreview && (
-        <CoverEditorModal
-          isOpen={isEditorOpen}
-          onClose={() => setIsEditorOpen(false)}
-          imageUrl={bannerPreview}
-          initialZoom={bannerZoom}
-          initialPositionX={bannerPositionX}
-          initialPositionY={bannerPositionY}
-          onSave={handleSaveCoverPosition}
-        />
-      )}
-    </div>
-  );
+    );
 }

@@ -25,6 +25,7 @@ import { ProductCard } from '../components/ProductCard';
 import { api } from '../lib/api';
 import { isUserOnline, formatLastSeen } from '../utils/presence';
 import { BannerImage } from '../components/BannerImage';
+import { VerificationBadge } from '../components/VerificationBadge';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -591,8 +592,10 @@ export function ProfilePage() {
               <div className="flex items-start justify-between gap-3 mb-3">
                 {/* Name block — sits flush after the spacer */}
                 <div className="space-y-1 flex flex-col items-start min-w-0">
-                  <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight leading-tight truncate max-w-[260px] sm:max-w-none">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight leading-tight truncate max-w-[260px] sm:max-w-none flex items-center gap-2">
                     {profile.full_name || profile.username}
+                    {profile.student_verified && <VerificationBadge type="student" />}
+                    {profile.founder_verified && <VerificationBadge type="founder" />}
                   </h1>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">

@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLastSeen } from '../hooks/useLastSeen';
 import { api } from '../lib/api';
 import { requestNotificationPermission, registerPushNotificationsServiceWorker, showLocalNotification } from '../utils/notifications';
+import { ToastContainer } from './ui/Toast';
 
 export function Layout() {
   const { darkMode, sidebarOpen, setSidebarOpen, setSearchOpen } = useUIStore();
@@ -130,6 +131,7 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh bg-background text-foreground w-full max-w-[100vw] overflow-x-hidden">
+      <ToastContainer />
       {/* Fixed Navbar */}
       <div className="fixed top-0 left-0 right-0 z-50">
         <Navbar />
