@@ -23,31 +23,19 @@ export function ImageCropperModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Output config based on type
+  const isAvatar = cropType === 'avatar';
+  const cropBox = isAvatar ? { width: 280, height: 280 } : { width: 480, height: 160 };
+  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 1500, height: 500 };
+
   // Image and cropping dimensions state
   const [naturalDimensions, setNaturalDimensions] = useState({ width: 0, height: 0 });
-  const [cropBox, setCropBox] = useState({ width: 250, height: 250 });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const dragStart = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
-
-  // Output config based on type
-  const isAvatar = cropType === 'avatar';
-  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 1500, height: 500 };
-
-  // Set up crop window size relative to container size
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (isAvatar) {
-      setCropBox({ width: 280, height: 280 });
-    } else {
-      // 3:1 banner ratio
-      setCropBox({ width: 480, height: 160 });
-    }
-  }, [isOpen, isAvatar]);
 
   // Read file into image source
   useEffect(() => {
