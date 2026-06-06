@@ -317,9 +317,9 @@ export function ImageCropperModal({
           </div>
 
           {/* Edit Area */}
-          <div ref={wrapperRef} className="flex-1 p-6 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20 min-h-[300px] relative">
+          <div ref={wrapperRef} className="flex-1 p-6 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20 min-h-[300px] relative overflow-hidden">
             {(loading || wrapperSize.width === 0) && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 bg-zinc-950/25 z-10 animate-fade-in">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 bg-zinc-950/25 z-25 animate-fade-in">
                 <Loader2 className="w-8 h-8 animate-spin text-orange-500 mb-2" />
                 Loading editor...
               </div>
@@ -335,7 +335,7 @@ export function ImageCropperModal({
                 onTouchMove={handleTouchMove}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
-                className="relative overflow-hidden select-none cursor-move touch-none border border-zinc-200 dark:border-zinc-800 bg-zinc-900 shadow-inner"
+                className="relative select-none cursor-move touch-none bg-zinc-900/10 z-0"
                 style={{
                   width: `${cropBox.width}px`,
                   height: `${cropBox.height}px`,
@@ -348,7 +348,7 @@ export function ImageCropperModal({
                     src={imageSrc}
                     alt="Crop Source"
                     onLoad={handleImageLoad}
-                    className="absolute pointer-events-none select-none max-w-none max-h-none origin-top-left"
+                    className="absolute pointer-events-none select-none max-w-none max-h-none origin-top-left z-0"
                     style={{
                       width: `${naturalDimensions.width * scale}px`,
                       height: `${naturalDimensions.height * scale}px`,
@@ -357,15 +357,25 @@ export function ImageCropperModal({
                   />
                 )}
                 
-                {/* Overlay cropping grid guidelines */}
-                <div className="absolute inset-0 border border-white/20 pointer-events-none flex">
-                  <div className="flex-1 border-r border-dashed border-white/10" />
-                  <div className="flex-1 border-r border-dashed border-white/10" />
+                {/* Crop Box Overlay Mask: transparent inside, semi-transparent outside */}
+                <div
+                  className="absolute inset-0 pointer-events-none z-10"
+                  style={{
+                    borderRadius: isAvatar ? '50%' : '12px',
+                    boxShadow: '0 0 0 9999px rgba(9, 9, 11, 0.75)',
+                    border: '2px solid rgba(255, 255, 255, 0.85)'
+                  }}
+                />
+
+                {/* Overlay cropping grid guidelines inside the crop frame */}
+                <div className="absolute inset-0 pointer-events-none flex z-20">
+                  <div className="flex-1 border-r border-dashed border-white/20" />
+                  <div className="flex-1 border-r border-dashed border-white/20" />
                   <div className="flex-1" />
                 </div>
-                <div className="absolute inset-0 border border-white/20 pointer-events-none flex flex-col">
-                  <div className="flex-1 border-b border-dashed border-white/10" />
-                  <div className="flex-1 border-b border-dashed border-white/10" />
+                <div className="absolute inset-0 pointer-events-none flex flex-col z-20">
+                  <div className="flex-1 border-b border-dashed border-white/20" />
+                  <div className="flex-1 border-b border-dashed border-white/20" />
                   <div className="flex-1" />
                 </div>
               </div>
