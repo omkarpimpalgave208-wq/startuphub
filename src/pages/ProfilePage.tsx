@@ -36,6 +36,8 @@ const bannerStyles: Record<string, string> = {
   'gradient-3': 'bg-gradient-to-r from-orange-500 via-fuchsia-500 to-blue-500'
 };
 
+const SHOW_VERIFICATION_FEATURE = false;
+
 export function ProfilePage() {
   const { username } = useParams<{ username: string }>();
   const { user } = useAuthStore();
@@ -594,8 +596,8 @@ export function ProfilePage() {
                 <div className="space-y-1 flex flex-col items-start min-w-0">
                   <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight leading-tight truncate max-w-[260px] sm:max-w-none flex items-center gap-2">
                     {profile.full_name || profile.username}
-                    {profile.student_verified && <VerificationBadge type="student" />}
-                    {profile.founder_verified && <VerificationBadge type="founder" />}
+                    {SHOW_VERIFICATION_FEATURE && profile.student_verified && <VerificationBadge type="student" />}
+                    {SHOW_VERIFICATION_FEATURE && profile.founder_verified && <VerificationBadge type="founder" />}
                   </h1>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">

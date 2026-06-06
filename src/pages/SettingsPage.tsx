@@ -23,6 +23,8 @@ const coverStyles = [
   { id: 'gradient-3', label: 'Sunset Burst', className: 'from-orange-500 via-fuchsia-500 to-blue-500' }
 ] as const;
 
+const SHOW_VERIFICATION_FEATURE = false;
+
 export function SettingsPage() {
   const { user, profile, fetchProfile } = useAuthStore();
   const [loading, setLoading] = useState(false);
@@ -476,7 +478,7 @@ export function SettingsPage() {
               />
             </div>
           </div>
-        <VerificationSection />
+        {SHOW_VERIFICATION_FEATURE && <VerificationSection />}
 
           <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
             {saveError && (
