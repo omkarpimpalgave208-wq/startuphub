@@ -71,8 +71,8 @@ export function ImageCropperModal({
         return { width: side, height: side };
       })()
     : (() => {
-        const width = Math.min(600, Math.max(150, wrapperSize.width - 32));
-        const height = width / 3;
+        const width = Math.max(150, Math.round(wrapperSize.width * 0.85));
+        const height = Math.round(width / 3);
         return { width, height };
       })();
 
@@ -320,7 +320,7 @@ export function ImageCropperModal({
           </div>
 
           {/* Edit Area */}
-          <div ref={wrapperRef} className="flex-1 p-6 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20 min-h-[400px] relative overflow-hidden">
+          <div ref={wrapperRef} className="flex-1 p-3 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20 min-h-[300px] relative overflow-hidden">
             {(loading || wrapperSize.width === 0) && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 bg-zinc-950/25 z-25 animate-fade-in">
                 <Loader2 className="w-8 h-8 animate-spin text-orange-500 mb-2" />
