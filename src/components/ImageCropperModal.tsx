@@ -23,10 +23,9 @@ export function ImageCropperModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Output config based on type
-  const isAvatar = cropType === 'avatar';
-  const cropBox = isAvatar ? { width: 280, height: 280 } : { width: 480, height: 160 };
-  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 1500, height: 500 };
+  // Sizing & measuring wrapper
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [wrapperSize, setWrapperSize] = useState({ width: 0, height: 0 });
 
   // Image and cropping dimensions state
   const [naturalDimensions, setNaturalDimensions] = useState({ width: 0, height: 0 });
@@ -36,6 +35,47 @@ export function ImageCropperModal({
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const dragStart = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+
+  // Touch pinch-to-zoom refs
+  const touchStartDist = useRef<number>(0);
+  const touchStartZoom = useRef<number>(1.0);
+  const isPinching = useRef<boolean>(false);
+
+  // Measure wrapper dimensions
+  useEffect(() => {
+    if (!isOpen) return;
+    const element = wrapperRef.current;
+    if (!element) return;
+
+    const observer = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0) return;
+      const { width, height } = entries[0].contentRect;
+      setWrapperSize({ width, height });
+    });
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [isOpen]);
+
+  // Output config based on type
+  const isAvatar = cropType === 'avatar';
+
+  // Calculate cropbox dimensions responsively
+  // Keep padding of 32px (16px on each side) to fit within container safely
+  const cropBox = isAvatar
+    ? (() => {
+        const side = Math.min(280, Math.max(120, wrapperSize.width - 32));
+        return { width: side, height: side };
+      })()
+    : (() => {
+        const width = Math.min(480, Math.max(150, wrapperSize.width - 32));
+        const height = width / 3;
+        return { width, height };
+      })();
+
+  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 1500, height: 500 };
 
   // Read file into image source
   useEffect(() => {
@@ -75,7 +115,7 @@ export function ImageCropperModal({
 
   // Math helper to calculate current minScale and rendered dimensions
   const getRenderDetails = useCallback(() => {
-    if (!naturalDimensions.width || !naturalDimensions.height) {
+    if (!naturalDimensions.width || !naturalDimensions.height || !cropBox.width) {
       return { minScale: 1, scale: 1, width: 0, height: 0, minX: 0, maxX: 0, minY: 0, maxY: 0 };
     }
 
@@ -130,6 +170,45 @@ export function ImageCropperModal({
 
   const endDrag = () => {
     setIsDragging(false);
+  };
+
+  // Touch Handlers for Pinch Zoom and Pan
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      isPinching.current = true;
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDist.current = dist;
+      touchStartZoom.current = zoom;
+    } else if (e.touches.length === 1) {
+      isPinching.current = false;
+      startDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && isPinching.current) {
+      if (e.cancelable) e.preventDefault();
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (touchStartDist.current > 10) {
+        const factor = dist / touchStartDist.current;
+        let nextZoom = touchStartZoom.current * factor;
+        nextZoom = Math.max(1.0, Math.min(3.0, nextZoom));
+        setZoom(nextZoom);
+      }
+    } else if (e.touches.length === 1 && !isPinching.current) {
+      onDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isPinching.current = false;
+    endDrag();
   };
 
   // Generate cropped image and call save
@@ -219,57 +298,59 @@ export function ImageCropperModal({
           </div>
 
           {/* Edit Area */}
-          <div className="flex-1 p-6 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20">
-            {loading && (
-              <div className="absolute flex flex-col items-center text-zinc-400">
+          <div ref={wrapperRef} className="flex-1 p-6 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20 min-h-[300px] relative">
+            {(loading || wrapperSize.width === 0) && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 bg-zinc-950/25 z-10 animate-fade-in">
                 <Loader2 className="w-8 h-8 animate-spin text-orange-500 mb-2" />
-                Loading image...
+                Loading editor...
               </div>
             )}
 
-            <div
-              ref={containerRef}
-              onMouseMove={(e) => onDrag(e.clientX, e.clientY)}
-              onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
-              onMouseUp={endDrag}
-              onMouseLeave={endDrag}
-              onTouchMove={(e) => onDrag(e.touches[0].clientX, e.touches[0].clientY)}
-              onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
-              onTouchEnd={endDrag}
-              className="relative overflow-hidden select-none cursor-move touch-none border border-zinc-200 dark:border-zinc-800 bg-zinc-900 shadow-inner"
-              style={{
-                width: `${cropBox.width}px`,
-                height: `${cropBox.height}px`,
-                borderRadius: isAvatar ? '50%' : '12px'
-              }}
-            >
-              {imageSrc && (
-                <img
-                  ref={imageRef}
-                  src={imageSrc}
-                  alt="Crop Source"
-                  onLoad={handleImageLoad}
-                  className="absolute pointer-events-none select-none max-w-none max-h-none origin-top-left"
-                  style={{
-                    width: `${naturalDimensions.width * scale}px`,
-                    height: `${naturalDimensions.height * scale}px`,
-                    transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`
-                  }}
-                />
-              )}
-              
-              {/* Overlay cropping grid guidelines */}
-              <div className="absolute inset-0 border border-white/20 pointer-events-none flex">
-                <div className="flex-1 border-r border-dashed border-white/10" />
-                <div className="flex-1 border-r border-dashed border-white/10" />
-                <div className="flex-1" />
+            {wrapperSize.width > 0 && (
+              <div
+                ref={containerRef}
+                onMouseMove={(e) => onDrag(e.clientX, e.clientY)}
+                onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
+                onMouseUp={endDrag}
+                onMouseLeave={endDrag}
+                onTouchMove={handleTouchMove}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                className="relative overflow-hidden select-none cursor-move touch-none border border-zinc-200 dark:border-zinc-800 bg-zinc-900 shadow-inner"
+                style={{
+                  width: `${cropBox.width}px`,
+                  height: `${cropBox.height}px`,
+                  borderRadius: isAvatar ? '50%' : '12px'
+                }}
+              >
+                {imageSrc && (
+                  <img
+                    ref={imageRef}
+                    src={imageSrc}
+                    alt="Crop Source"
+                    onLoad={handleImageLoad}
+                    className="absolute pointer-events-none select-none max-w-none max-h-none origin-top-left"
+                    style={{
+                      width: `${naturalDimensions.width * scale}px`,
+                      height: `${naturalDimensions.height * scale}px`,
+                      transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`
+                    }}
+                  />
+                )}
+                
+                {/* Overlay cropping grid guidelines */}
+                <div className="absolute inset-0 border border-white/20 pointer-events-none flex">
+                  <div className="flex-1 border-r border-dashed border-white/10" />
+                  <div className="flex-1 border-r border-dashed border-white/10" />
+                  <div className="flex-1" />
+                </div>
+                <div className="absolute inset-0 border border-white/20 pointer-events-none flex flex-col">
+                  <div className="flex-1 border-b border-dashed border-white/10" />
+                  <div className="flex-1 border-b border-dashed border-white/10" />
+                  <div className="flex-1" />
+                </div>
               </div>
-              <div className="absolute inset-0 border border-white/20 pointer-events-none flex flex-col">
-                <div className="flex-1 border-b border-dashed border-white/10" />
-                <div className="flex-1 border-b border-dashed border-white/10" />
-                <div className="flex-1" />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Zoom Slider */}

@@ -32,6 +32,11 @@ export function CoverEditorModal({
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef({ x: 0, y: 0, pos_x: 0, pos_y: 0 });
 
+  // Touch pinch-to-zoom refs
+  const touchStartDist = useRef<number>(0);
+  const touchStartZoom = useRef<number>(1.0);
+  const isPinching = useRef<boolean>(false);
+
   useEffect(() => {
     if (isOpen) {
       setZoom(initialZoom || 1.0);
@@ -119,15 +124,45 @@ export function CoverEditorModal({
     onDrag(e.clientX, e.clientY);
   };
 
-  // Touch Handlers
+  // Touch Handlers for Pinch Zoom and Pan
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    const touch = e.touches[0];
-    startDrag(touch.clientX, touch.clientY);
+    if (e.touches.length === 2) {
+      isPinching.current = true;
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDist.current = dist;
+      touchStartZoom.current = zoom;
+    } else if (e.touches.length === 1) {
+      isPinching.current = false;
+      const touch = e.touches[0];
+      startDrag(touch.clientX, touch.clientY);
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    const touch = e.touches[0];
-    onDrag(touch.clientX, touch.clientY);
+    if (e.touches.length === 2 && isPinching.current) {
+      if (e.cancelable) e.preventDefault();
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (touchStartDist.current > 10) {
+        const factor = dist / touchStartDist.current;
+        let nextZoom = touchStartZoom.current * factor;
+        nextZoom = Math.max(1.0, Math.min(3.0, nextZoom));
+        setZoom(nextZoom);
+      }
+    } else if (e.touches.length === 1 && !isPinching.current) {
+      const touch = e.touches[0];
+      onDrag(touch.clientX, touch.clientY);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isPinching.current = false;
+    endDrag();
   };
 
   const handleSave = async () => {
@@ -174,9 +209,8 @@ export function CoverEditorModal({
             onMouseLeave={endDrag}
             onTouchMove={handleTouchMove}
             onTouchStart={handleTouchStart}
-            onTouchEnd={endDrag}
-            className="relative w-full overflow-hidden bg-zinc-950 rounded-2xl select-none cursor-move group touch-none border border-zinc-200 dark:border-zinc-800"
-            style={{ height: '260px' }} // Exact aspect ratio bounds matching the profile cover photo
+            onTouchEnd={handleTouchEnd}
+            className="relative w-full aspect-[3/1] overflow-hidden bg-zinc-950 rounded-2xl select-none cursor-move group touch-none border border-zinc-200 dark:border-zinc-800"
           >
             <img
               src={imageUrl}
