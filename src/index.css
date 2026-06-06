@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-background: var(--background);
+  --color-border: var(--border);
+  --color-card: var(--card);
+}
+
+:root {
+  --foreground: #09090b; /* zinc-950 */
+  --muted-foreground: #52525b; /* zinc-600 */
+  --background: #fafafa; /* zinc-50 */
+  --border: #e4e4e7; /* zinc-200 */
+  --card: #ffffff;
+}
+
+.dark {
+  --foreground: #fafafa; /* zinc-50 */
+  --muted-foreground: #a1a1aa; /* zinc-400 */
+  --background: #09090b; /* zinc-950 */
+  --border: #27272a; /* zinc-800 */
+  --card: #18181b; /* zinc-900 */
+}
+
 /* Base styles to prevent overflow */
 html,
 body {

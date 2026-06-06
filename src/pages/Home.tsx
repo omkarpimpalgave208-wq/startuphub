@@ -157,7 +157,7 @@ export function Home() {
               </Link>
               <a
                 href="#featured"
-                className="inline-flex items-center gap-2 px-5 py-3 border border-zinc-700 bg-zinc-800/40 hover:bg-zinc-850/80 text-zinc-200 font-bold rounded-xl transition-all active:scale-95 text-xs sm:text-sm cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-3 border border-zinc-700 bg-zinc-800/40 hover:bg-zinc-800/80 text-zinc-200 font-bold rounded-xl transition-all active:scale-95 text-xs sm:text-sm cursor-pointer"
               >
                 🔍 Explore Startups
               </a>
@@ -175,9 +175,9 @@ export function Home() {
                 <Rocket className="w-5 h-5" />
               </div>
               
-              <span className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-md border border-zinc-800 bg-zinc-900/90 text-zinc-405">Builder</span>
-              <span className="absolute bottom-4 right-2 text-[10px] font-bold px-2 py-0.5 rounded-md border border-zinc-800 bg-zinc-900/90 text-zinc-405">Designer</span>
-              <span className="absolute bottom-2 left-6 text-[10px] font-bold px-2 py-0.5 rounded-md border border-zinc-800 bg-zinc-900/90 text-zinc-405">Investor</span>
+              <span className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-md border border-zinc-800 bg-zinc-900/90 text-zinc-400">Builder</span>
+              <span className="absolute bottom-4 right-2 text-[10px] font-bold px-2 py-0.5 rounded-md border border-zinc-800 bg-zinc-900/90 text-zinc-400">Designer</span>
+              <span className="absolute bottom-2 left-6 text-[10px] font-bold px-2 py-0.5 rounded-md border border-zinc-800 bg-zinc-900/90 text-zinc-400">Investor</span>
             </div>
           </div>
         </div>
@@ -187,11 +187,11 @@ export function Home() {
       <div className="max-w-2xl mx-auto px-4 -mt-12 relative z-20">
         <button
           onClick={() => setSearchOpen(true)}
-          className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800/90 text-zinc-450 dark:text-zinc-500 hover:border-orange-500/50 hover:shadow-lg hover:shadow-orange-500/5 transition-all duration-200 cursor-pointer text-left shadow-md"
+          className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800/90 text-zinc-400 dark:text-zinc-500 hover:border-orange-500/50 hover:shadow-lg hover:shadow-orange-500/5 transition-all duration-200 cursor-pointer text-left shadow-md"
         >
           <Search className="w-5 h-5 text-zinc-400 dark:text-zinc-500 flex-shrink-0" />
           <span className="text-sm sm:text-base truncate flex-1 text-zinc-500 dark:text-zinc-400 font-medium">Search startups, founders, products, skills...</span>
-          <kbd className="hidden sm:inline-block text-xs bg-zinc-50 dark:bg-zinc-850 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700/60 flex-shrink-0 font-bold text-zinc-500">
+          <kbd className="hidden sm:inline-block text-xs bg-zinc-50 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700/60 flex-shrink-0 font-bold text-zinc-500">
             ⌘K
           </kbd>
         </button>
@@ -209,7 +209,7 @@ export function Home() {
           </div>
 
           {/* Filter Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-855 rounded-xl w-fit">
+          <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl w-fit">
             <button
               onClick={() => setActiveTab('trending')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -236,7 +236,7 @@ export function Home() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50/50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-650 dark:text-red-400">
+          <div className="rounded-xl border border-red-200 bg-red-50/50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
             {error}
           </div>
         )}
@@ -368,7 +368,7 @@ export function Home() {
                     <Link to={`/profile/${activity.username}`} className="font-bold text-zinc-900 dark:text-zinc-200 hover:underline">
                       {activity.founderName}
                     </Link>
-                    <span className="text-[11px] text-zinc-450 dark:text-zinc-400 font-medium">
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-400 font-medium">
                       {activity.message}
                     </span>
                     <span className="text-[11px] font-bold text-orange-500">
@@ -398,7 +398,7 @@ export function Home() {
             ))}
           </div>
         ) : (
-          <div className="p-6 text-center border border-zinc-200 dark:border-zinc-850 rounded-2xl text-zinc-500 text-sm">
+          <div className="p-6 text-center border border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-500 text-sm">
             No recent milestone logs found.
           </div>
         )}

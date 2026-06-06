@@ -24,6 +24,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { ProductCard } from '../components/ProductCard';
 import { api } from '../lib/api';
 import { isUserOnline, formatLastSeen } from '../utils/presence';
+import { BannerImage } from '../components/BannerImage';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -454,7 +455,7 @@ export function ProfilePage() {
             <Button
               variant="secondary"
               onClick={handleShareProfile}
-              className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-805 dark:text-zinc-200 rounded-xl transition-all shadow-sm"
+              className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-xl transition-all shadow-sm"
             >
               {shareCopied ? 'Copied!' : 'Share Profile'}
             </Button>
@@ -490,12 +491,12 @@ export function ProfilePage() {
                 Pending
               </span>
             ) : (
-              <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-850 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={connectLoading} onClick={handleConnect}>
+              <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={connectLoading} onClick={handleConnect}>
                 Connect
               </Button>
             )}
             
-            <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-855 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={messageLoading} onClick={handleOpenConversation}>
+            <Button variant="secondary" className="flex-1 sm:flex-initial text-xs font-bold py-2 px-4 h-9 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-xl transition-all shadow-sm" loading={messageLoading} onClick={handleOpenConversation}>
               Message
             </Button>
           </div>
@@ -518,16 +519,12 @@ export function ProfilePage() {
           style={{ height: 'clamp(220px, 35vh, 320px)' }}
         >
           {coverUrl ? (
-            <img
+            <BannerImage
               src={coverUrl}
+              zoom={coverZoom}
+              positionX={coverPositionX}
+              positionY={coverPositionY}
               alt="Profile cover"
-              className="w-full h-full object-cover select-none pointer-events-none"
-              style={{
-                objectPosition: `${coverPositionX * 100}% ${coverPositionY * 100}%`,
-                transform: `scale(${coverZoom})`,
-                transformOrigin: 'center'
-              }}
-              loading="lazy"
             />
           ) : (
             <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
@@ -700,11 +697,11 @@ export function ProfilePage() {
                             targetElement.scrollIntoView({ behavior: 'smooth' });
                           }
                         }}
-                        className="flex flex-col items-center justify-center text-center p-4 rounded-2xl border border-zinc-150 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm hover:shadow-md hover:border-orange-500/30 dark:hover:border-orange-500/25 transition-all duration-200 cursor-pointer group w-full relative overflow-hidden"
+                        className="flex flex-col items-center justify-center text-center p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm hover:shadow-md hover:border-orange-500/30 dark:hover:border-orange-500/25 transition-all duration-200 cursor-pointer group w-full relative overflow-hidden"
                       >
                         <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-br from-zinc-500/5 to-transparent rounded-bl-full pointer-events-none" />
                         <span className="text-lg mb-1">{stat.icon}</span>
-                        <span className="text-[10px] sm:text-xs font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wider">
+                        <span className="text-[10px] sm:text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
                           {stat.label}
                         </span>
                         <span className="text-lg sm:text-xl font-black text-zinc-900 dark:text-white mt-0.5 group-hover:text-orange-500 transition-colors">
@@ -727,7 +724,7 @@ export function ProfilePage() {
                         href={item.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3.5 py-1.5 text-xs font-medium text-zinc-650 dark:text-zinc-350 hover:border-orange-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all shadow-sm"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-200 hover:border-orange-500 dark:hover:border-orange-400 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-500/5 transition-all shadow-sm"
                       >
                         <Icon className="w-3.5 h-3.5" />
                         <span>{item.label}</span>
@@ -769,7 +766,7 @@ export function ProfilePage() {
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" className="text-xs py-1 px-3 h-8 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleAcceptConnectionRequest(); }}>Accept</Button>
-                            <Button size="sm" variant="outline" className="text-xs py-1 px-3 h-8 border-zinc-200 dark:border-zinc-800 text-zinc-650 rounded-lg transition" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleRejectConnectionRequest(); }}>Reject</Button>
+                            <Button size="sm" variant="outline" className="text-xs py-1 px-3 h-8 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg transition" loading={connectLoading} onClick={() => { setConnectionRequestId(request.id); handleRejectConnectionRequest(); }}>Reject</Button>
                           </div>
                         </div>
                       ))}
@@ -804,7 +801,7 @@ export function ProfilePage() {
                         {products[0].logo_url ? (
                           <img src={products[0].logo_url} alt={products[0].name} className="w-full h-full object-cover" />
                         ) : (
-                          <span className="text-2xl font-black text-zinc-400 dark:text-zinc-550">{products[0].name[0]}</span>
+                          <span className="text-2xl font-black text-zinc-400 dark:text-zinc-500">{products[0].name[0]}</span>
                         )}
                       </div>
                       <div className="space-y-1.5 min-w-0 flex-1">
@@ -812,14 +809,14 @@ export function ProfilePage() {
                           <h3 className="text-lg font-extrabold text-zinc-900 dark:text-white leading-tight">{products[0].name}</h3>
                           <span className="text-[10px] px-2.5 py-0.5 rounded-full border border-orange-200/50 bg-orange-50/50 font-bold text-orange-600 dark:border-orange-950/40 dark:bg-orange-950/20 uppercase tracking-wider">{products[0].category}</span>
                         </div>
-                        <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-350 leading-snug">{products[0].tagline}</p>
-                        <p className="text-xs text-zinc-550 dark:text-zinc-400 line-clamp-2 leading-relaxed">{products[0].description}</p>
+                        <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 leading-snug">{products[0].tagline}</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">{products[0].description}</p>
                         
                         {/* Spotlight Metadata Row */}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-400 dark:text-zinc-500 pt-1.5 font-medium">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-400 dark:text-zinc-400 pt-1.5 font-medium">
                           <span>Launched {new Date(products[0].created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
                           <span>&bull;</span>
-                          <span className="font-semibold text-zinc-650 dark:text-zinc-400">{products[0].upvote_count || 0} Upvotes</span>
+                          <span className="font-semibold text-zinc-600 dark:text-zinc-400">{products[0].upvote_count || 0} Upvotes</span>
                         </div>
                       </div>
                     </div>
@@ -832,7 +829,7 @@ export function ProfilePage() {
                             href={products[0].website_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs font-bold text-zinc-750 dark:text-zinc-300 hover:border-orange-500 hover:text-orange-550 transition-colors shadow-sm"
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:border-orange-500 dark:hover:border-orange-400 hover:text-orange-500 dark:hover:text-orange-400 transition-colors shadow-sm"
                           >
                             <span>Visit Site</span>
                             <Globe className="w-3.5 h-3.5" />
@@ -852,7 +849,7 @@ export function ProfilePage() {
                 <div className="mx-4 md:mx-8 mt-6 p-6 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/30 dark:bg-zinc-950/20 text-center flex flex-col items-center justify-center shadow-sm">
                   <Sparkles className="w-6 h-6 text-orange-400 mb-2" />
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white">Feature Your Startup</h4>
-                  <p className="text-[11px] text-zinc-550 dark:text-zinc-450 mt-1 max-w-sm mx-auto">Launch a product on StartupHub to feature it prominently here as currently building!</p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">Launch a product on StartupHub to feature it prominently here as currently building!</p>
                   <Link to="/launch" className="mt-3.5 inline-flex items-center gap-1 text-[11px] font-bold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-xl shadow-sm transition">
                     Launch Startup &rarr;
                   </Link>
@@ -860,14 +857,14 @@ export function ProfilePage() {
               ) : null}
 
               {/* About Section */}
-              <section id="about-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+              <section id="about-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-200 dark:border-zinc-900/60 mt-6">
                 <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                   <Briefcase className="w-5 h-5 text-orange-500 flex-shrink-0" />
                   <h2 className="text-lg font-bold tracking-tight">About the Founder</h2>
                 </div>
                 <div className="prose dark:prose-invert max-w-none">
                   {profile.bio ? (
-                    <p className="text-sm md:text-base text-zinc-650 dark:text-zinc-350 leading-relaxed whitespace-pre-wrap">
+                    <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-wrap">
                       {profile.bio}
                     </p>
                   ) : (
@@ -883,7 +880,7 @@ export function ProfilePage() {
                       <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Education</h4>
                       <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mt-1">{profile.college_name}</p>
                       {profile.studying_year && (
-                        <p className="text-xs text-zinc-450 dark:text-zinc-500 mt-0.5">Year of study: {profile.studying_year}</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Year of study: {profile.studying_year}</p>
                       )}
                     </div>
                   </div>
@@ -892,7 +889,7 @@ export function ProfilePage() {
 
               {/* Skills & Achievements Section */}
               {((profile.skills && profile.skills.length > 0) || (profile.achievements && profile.achievements.length > 0)) && (
-                <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+                <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-200 dark:border-zinc-900/60 mt-6">
                   <div className="grid gap-6 md:grid-cols-2">
                     {/* Skills Column */}
                     {profile.skills && profile.skills.length > 0 && (
@@ -905,7 +902,7 @@ export function ProfilePage() {
                           {profile.skills.map((skill) => (
                             <span
                               key={skill}
-                              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 text-zinc-750 dark:text-zinc-305 hover:border-orange-500/30 hover:text-orange-500 transition-colors shadow-sm"
+                              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-200/60 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-100 hover:border-orange-500/30 hover:text-orange-500 transition-colors shadow-sm"
                             >
                               {skill}
                             </span>
@@ -928,7 +925,7 @@ export function ProfilePage() {
                               className="flex items-start gap-2.5 p-3.5 rounded-xl border border-zinc-100 dark:border-zinc-900 bg-zinc-50/30 dark:bg-zinc-950/20"
                             >
                               <div className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-2 flex-shrink-0" />
-                              <span className="text-xs md:text-sm text-zinc-650 dark:text-zinc-350 leading-relaxed font-semibold">{ach}</span>
+                              <span className="text-xs md:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed font-semibold">{ach}</span>
                             </div>
                           ))}
                         </div>
@@ -939,7 +936,7 @@ export function ProfilePage() {
               )}
 
               {/* Recent Products Grid with polished Empty State */}
-              <section id="products-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+              <section id="products-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-200 dark:border-zinc-900/60 mt-6">
                 <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                   <Layers className="w-5 h-5 text-orange-500 flex-shrink-0" />
                   <h2 className="text-lg font-bold tracking-tight">Recent Startups & Products</h2>
@@ -973,7 +970,7 @@ export function ProfilePage() {
 
               {/* Saved Startups Section (Private, only visible to profile owner) with polished Empty State */}
               {isOwnProfile && (
-                <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+                <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-200 dark:border-zinc-900/60 mt-6">
                   <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                     <CheckCircle className="w-5 h-5 text-sky-500 flex-shrink-0" />
                     <h2 className="text-lg font-bold tracking-tight">Saved Startups</h2>
@@ -1002,7 +999,7 @@ export function ProfilePage() {
               )}
 
               {/* Recent Activity Timeline Section with polished Empty State */}
-              <section id="timeline-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-150 dark:border-zinc-900/60 mt-6">
+              <section id="timeline-section" className="px-4 md:px-8 pt-6 text-left border-t border-zinc-200 dark:border-zinc-900/60 mt-6">
                 <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-4">
                   <Activity className="w-5 h-5 text-orange-500 flex-shrink-0" />
                   <h2 className="text-lg font-bold tracking-tight">Recent Activity</h2>
@@ -1032,13 +1029,13 @@ export function ProfilePage() {
                                 <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-1 hover:text-orange-500 transition-colors">
                                   <Link to={event.link}>{event.title}</Link>
                                 </h4>
-                                <p className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{event.subtitle}</p>
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{event.subtitle}</p>
                                 <div className="flex gap-2 items-center mt-3 flex-wrap font-medium">
-                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-zinc-50 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-450 uppercase tracking-wide border border-zinc-100 dark:border-zinc-900">
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-zinc-50 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 uppercase tracking-wide border border-zinc-100 dark:border-zinc-900">
                                     {event.category}
                                   </span>
                                   <span className="text-zinc-300 dark:text-zinc-800 font-bold">&bull;</span>
-                                  <span className="text-[10px] font-semibold text-zinc-550 dark:text-zinc-450">
+                                  <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
                                     {event.upvotes} upvotes
                                   </span>
                                 </div>
@@ -1062,7 +1059,7 @@ export function ProfilePage() {
                       <Activity className="w-5 h-5" />
                     </div>
                     <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1">No Activity</h4>
-                    <p className="text-xs text-zinc-550 dark:text-zinc-400">No activity milestones or discussions recorded yet.</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">No activity milestones or discussions recorded yet.</p>
                   </div>
                 )}
               </section>

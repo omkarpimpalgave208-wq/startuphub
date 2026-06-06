@@ -176,7 +176,7 @@ export function Navbar() {
               {/* Dark mode toggle */}
               <button
                 onClick={toggleDarkMode}
-                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hidden sm:flex flex-shrink-0"
+                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex flex-shrink-0"
                 aria-label="Toggle dark mode"
               >
                 {darkMode ? (

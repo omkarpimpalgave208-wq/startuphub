@@ -99,7 +99,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
         <div className={`
           w-full bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80
           hover:border-orange-500/30 dark:hover:border-orange-500/30
-          shadow-sm hover:shadow-xl dark:shadow-none hover:shadow-orange-550/5
+          shadow-sm hover:shadow-xl dark:shadow-none hover:shadow-orange-500/5
           transition-all duration-200
           ${featured ? 'p-6 sm:p-8' : 'p-5 sm:p-6'}
         `}>
@@ -107,7 +107,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
             
             {/* Logo */}
             <div className={`
-              flex-shrink-0 rounded-2xl overflow-hidden bg-zinc-100 dark:bg-zinc-850 flex items-center justify-center border border-zinc-200/40 dark:border-zinc-800
+              flex-shrink-0 rounded-2xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center border border-zinc-200/40 dark:border-zinc-800
               ${featured ? 'w-16 h-16 sm:w-20 sm:h-20' : 'w-12 h-12 sm:w-16 sm:h-16'}
             `}>
               {product.logo_url ? (
@@ -117,7 +117,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-xl sm:text-2xl font-black text-zinc-400 dark:text-zinc-550">
+                <span className="text-xl sm:text-2xl font-black text-zinc-400 dark:text-zinc-500">
                   {product.name[0]}
                 </span>
               )}
@@ -147,7 +147,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                   </div>
                   
                   <p className={`
-                    text-zinc-500 dark:text-zinc-405 mt-0.5 line-clamp-2 leading-relaxed
+                    text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed
                     ${featured ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'}
                   `}>
                     {product.tagline}
@@ -174,7 +174,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
               {/* Looking For Tags */}
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {lookingFor.map((role) => (
-                  <span key={role} className="px-2 py-0.5 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/40 dark:border-zinc-850 text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold">
+                  <span key={role} className="px-2 py-0.5 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/40 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold">
                     {role}
                   </span>
                 ))}
@@ -193,7 +193,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                       alt={founderName}
                       size="xs"
                     />
-                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-350 truncate">
+                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">
                       {founderName}
                     </span>
                   </div>

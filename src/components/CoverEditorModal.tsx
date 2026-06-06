@@ -158,7 +158,7 @@ export function CoverEditorModal({
           <button
             onClick={onClose}
             disabled={saving}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-650 hover:bg-zinc-100 dark:hover:bg-zinc-850 transition-colors"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -175,7 +175,7 @@ export function CoverEditorModal({
             onTouchMove={handleTouchMove}
             onTouchStart={handleTouchStart}
             onTouchEnd={endDrag}
-            className="relative w-full overflow-hidden bg-zinc-950 rounded-2xl select-none cursor-move group touch-none border border-zinc-200 dark:border-zinc-850"
+            className="relative w-full overflow-hidden bg-zinc-950 rounded-2xl select-none cursor-move group touch-none border border-zinc-200 dark:border-zinc-800"
             style={{ height: '260px' }} // Exact aspect ratio bounds matching the profile cover photo
           >
             <img
@@ -202,7 +202,7 @@ export function CoverEditorModal({
 
         {/* Zoom Controls */}
         <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-200 dark:border-zinc-800 flex items-center gap-4">
-          <ZoomOut className="w-4 h-4 text-zinc-400 dark:text-zinc-550 flex-shrink-0" />
+          <ZoomOut className="w-4 h-4 text-zinc-400 dark:text-zinc-500 flex-shrink-0" />
           <input
             type="range"
             min="1.00"
@@ -212,7 +212,7 @@ export function CoverEditorModal({
             onChange={(e) => setZoom(parseFloat(e.target.value))}
             className="flex-1 h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
           />
-          <ZoomIn className="w-4 h-4 text-zinc-400 dark:text-zinc-550 flex-shrink-0" />
+          <ZoomIn className="w-4 h-4 text-zinc-400 dark:text-zinc-500 flex-shrink-0" />
           <span className="text-xs font-bold text-zinc-500 min-w-[32px] text-right">
             {Math.round(zoom * 100)}%
           </span>

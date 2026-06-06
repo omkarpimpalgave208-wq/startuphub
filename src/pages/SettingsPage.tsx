@@ -9,6 +9,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { api } from '../lib/api';
 import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
 import { CoverEditorModal } from '../components/CoverEditorModal';
+import { BannerImage } from '../components/BannerImage';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -208,12 +209,8 @@ export function SettingsPage() {
     setLoading(true);
     try {
       setBannerMessage('Checking image resolution...');
-      const dimensions = await checkImageResolution(file);
-      if (dimensions.width < 1500) {
-        setBannerMessage('✗ Cover image width must be at least 1500px (recommended: 2000×500).');
-        setLoading(false);
-        return;
-      }
+      const dimensions = await checkImageResolution(file).catch(() => ({ width: 1500, height: 500 }));
+
 
       let fileToUpload = file;
       const maxSizeMB = 4; // Banners are larger for high quality
@@ -453,15 +450,12 @@ export function SettingsPage() {
           >
             {bannerPreview ? (
               <div className="mx-auto h-48 w-full rounded-3xl overflow-hidden bg-zinc-955 relative flex items-center justify-center border border-zinc-200 dark:border-zinc-800">
-                <img
+                <BannerImage
                   src={bannerPreview}
+                  zoom={bannerZoom}
+                  positionX={bannerPositionX}
+                  positionY={bannerPositionY}
                   alt="Cover preview"
-                  className="w-full h-full object-cover select-none pointer-events-none"
-                  style={{
-                    objectPosition: `${bannerPositionX * 100}% ${bannerPositionY * 100}%`,
-                    transform: `scale(${bannerZoom})`,
-                    transformOrigin: 'center'
-                  }}
                 />
               </div>
             ) : (

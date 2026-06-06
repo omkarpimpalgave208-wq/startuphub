@@ -561,7 +561,7 @@ export function MessagesPage() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-zinc-450">Conversation</p>
+                  <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">Conversation</p>
                   <h2 className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-white">
                     Select a conversation
                   </h2>

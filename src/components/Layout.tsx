@@ -39,6 +39,18 @@ export function Layout() {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  // Sync with system theme changes if user hasn't set an override
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem('darkMode')) {
+        document.documentElement.classList.toggle('dark', e.matches);
+      }
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
   // Scroll to top on route change
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -117,7 +129,7 @@ export function Layout() {
   }, [setSidebarOpen]);
 
   return (
-    <div className="min-h-dvh bg-zinc-50 dark:bg-zinc-950 w-full max-w-[100vw] overflow-x-hidden">
+    <div className="min-h-dvh bg-background text-foreground w-full max-w-[100vw] overflow-x-hidden">
       {/* Fixed Navbar */}
       <div className="fixed top-0 left-0 right-0 z-50">
         <Navbar />

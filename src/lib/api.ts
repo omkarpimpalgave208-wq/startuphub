@@ -837,10 +837,27 @@ export const api = {
     const website = (data.website as string | null) || (data.website_url as string | null) || null;
     const website_url = (data.website_url as string | null) || (data.website as string | null) || null;
     const banner_url = (data.banner_url as string | null) || null;
-    const banner_style = (data.banner_style as string | null) || null;
-    const banner_zoom = typeof data.banner_zoom === 'number' ? data.banner_zoom : null;
-    const banner_position_x = typeof data.banner_position_x === 'number' ? data.banner_position_x : null;
-    const banner_position_y = typeof data.banner_position_y === 'number' ? data.banner_position_y : null;
+    
+    let banner_style = (data.banner_style as string | null) || null;
+    let banner_zoom = typeof data.banner_zoom === 'number' ? data.banner_zoom : null;
+    let banner_position_x = typeof data.banner_position_x === 'number' ? data.banner_position_x : null;
+    let banner_position_y = typeof data.banner_position_y === 'number' ? data.banner_position_y : null;
+
+    // Unpack serialized coordinates (format: styleId|zoom|posX|posY)
+    if (banner_style && banner_style.includes('|')) {
+      const parts = banner_style.split('|');
+      banner_style = parts[0] || null;
+      if (parts[1] && !isNaN(parseFloat(parts[1]))) {
+        banner_zoom = parseFloat(parts[1]);
+      }
+      if (parts[2] && !isNaN(parseFloat(parts[2]))) {
+        banner_position_x = parseFloat(parts[2]);
+      }
+      if (parts[3] && !isNaN(parseFloat(parts[3]))) {
+        banner_position_y = parseFloat(parts[3]);
+      }
+    }
+
     const original_image_width = typeof data.original_image_width === 'number' ? data.original_image_width : null;
     const original_image_height = typeof data.original_image_height === 'number' ? data.original_image_height : null;
     const location = (data.location as string | null) || null;
@@ -1044,6 +1061,28 @@ export const api = {
   },
 
   async updateProfile(userId: string, updates: Partial<Profile>): Promise<Profile> {
+    // Intercept zoom and positioning changes to pack them into banner_style
+    const hasBannerZoom = updates.banner_zoom !== undefined;
+    const hasBannerPosX = updates.banner_position_x !== undefined;
+    const hasBannerPosY = updates.banner_position_y !== undefined;
+    const hasBannerStyle = updates.banner_style !== undefined;
+
+    if (hasBannerZoom || hasBannerPosX || hasBannerPosY || hasBannerStyle) {
+      // Get the existing profile to read the current values
+      const currentProfile = await this.getProfile(userId);
+      const currentZoom = currentProfile?.banner_zoom ?? 1.0;
+      const currentPosX = currentProfile?.banner_position_x ?? 0.5;
+      const currentPosY = currentProfile?.banner_position_y ?? 0.35;
+      const currentStyle = currentProfile?.banner_style ?? 'gradient-1';
+
+      const newZoom = updates.banner_zoom !== undefined ? updates.banner_zoom : currentZoom;
+      const newPosX = updates.banner_position_x !== undefined ? updates.banner_position_x : currentPosX;
+      const newPosY = updates.banner_position_y !== undefined ? updates.banner_position_y : currentPosY;
+      const newStyle = updates.banner_style !== undefined ? updates.banner_style : currentStyle;
+
+      updates.banner_style = `${newStyle || 'gradient-1'}|${newZoom}|${newPosX}|${newPosY}`;
+    }
+
     // Only send columns that are known to exist in the database schema.
     // This prevents "Could not find column in schema cache" errors when the
     // caller accidentally passes extra keys or future type fields not yet migrated.
@@ -1051,8 +1090,6 @@ export const api = {
       'username', 'full_name', 'avatar_url', 'headline', 'bio',
       'website', 'website_url', 'github_url', 'twitter_url', 'linkedin_url',
       'location', 'banner_url', 'banner_style',
-      'banner_zoom', 'banner_position_x', 'banner_position_y',
-      'original_image_width', 'original_image_height',
       'skills', 'achievements', 'experience',
       'college_name', 'studying_year',
       'last_seen',
@@ -1061,6 +1098,16 @@ export const api = {
     let safeUpdates = Object.fromEntries(
       Object.entries(updates).filter(([key]) => ALLOWED_PROFILE_COLUMNS.has(key))
     );
+
+    if (Object.keys(safeUpdates).length === 0) {
+      console.log('[api.updateProfile] Empty update payload, skipping DB query.');
+      const currentProfile = await this.getProfile(userId);
+      if (!currentProfile) {
+        throw new Error('Profile not found.');
+      }
+      return currentProfile;
+    }
+
 
     // Self-healing retry: if Supabase returns a schema-cache error for a specific
     // column (e.g. studying_year migration not yet applied), strip that column and

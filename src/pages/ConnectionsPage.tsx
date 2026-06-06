@@ -137,7 +137,7 @@ export function ConnectionsPage() {
         <section className="rounded-none md:rounded-[2rem] border-0 md:border border-zinc-200 dark:border-zinc-800 bg-transparent md:bg-white md:dark:bg-zinc-950 p-0 md:p-6 shadow-none md:shadow-sm">
           <div className="flex items-center justify-between gap-4 mb-6">
             <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-zinc-450">Incoming</p>
+              <p className="text-sm uppercase tracking-[0.24em] text-zinc-400">Incoming</p>
               <p className="text-xl font-semibold text-zinc-900 dark:text-white">{incoming.length} pending request{incoming.length === 1 ? '' : 's'}</p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
@@ -208,7 +208,7 @@ export function ConnectionsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-zinc-900 dark:text-white truncate">{request.receiver?.full_name || request.receiver?.username}</p>
                       <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">@{request.receiver?.username}</p>
-                      <p className="mt-1 text-sm text-zinc-650 dark:text-zinc-400 line-clamp-1">Pending request sent on {new Date(request.created_at).toLocaleDateString()}</p>
+                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400 line-clamp-1">Pending request sent on {new Date(request.created_at).toLocaleDateString()}</p>
                     </div>
                   </div>
                   <div className="rounded-full bg-orange-100 dark:bg-orange-950/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-orange-700 dark:text-orange-300 w-fit sm:w-auto self-start sm:self-auto flex-shrink-0">
