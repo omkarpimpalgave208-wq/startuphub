@@ -325,86 +325,70 @@ export function Home() {
           <p className="text-sm text-zinc-500">Real-time metrics tracking the growth and activity of our startup ecosystem.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           {statsLoading ? (
             [...Array(4)].map((_, i) => (
-              <div key={i} className="p-6 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-2xl space-y-4 shadow-sm animate-pulse">
-                <div className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-                <div className="space-y-2">
-                  <div className="h-6 w-16 bg-zinc-200 dark:bg-zinc-800 rounded" />
-                  <div className="h-4 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+              <div key={i} className="p-3 sm:p-5 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center text-center space-y-2 shadow-sm animate-pulse">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+                <div className="space-y-1.5">
+                  <div className="h-5 sm:h-6 w-12 sm:w-16 bg-zinc-200 dark:bg-zinc-800 rounded mx-auto" />
+                  <div className="h-3 sm:h-4 w-20 sm:w-28 bg-zinc-200 dark:bg-zinc-800 rounded mx-auto" />
                 </div>
               </div>
             ))
           ) : (
             <>
               {/* Card 1: Total Users */}
-              <div className="p-6 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-2xl flex flex-col justify-between shadow-sm hover:border-orange-500/20 transition-all group">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center transition-transform group-hover:scale-110">
-                    <Users className="w-5 h-5" />
-                  </div>
+              <div className="p-3 sm:p-5 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center text-center shadow-sm lg:hover:border-orange-500/30 lg:hover:-translate-y-1 lg:hover:shadow-md transition-all duration-200 group">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center mb-2 sm:mb-3 transition-transform lg:group-hover:scale-110">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <div>
-                  <span className="text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight">
-                    {stats?.totalUsers ?? 0}
-                  </span>
-                  <span className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-1 block">
-                    Total Users
-                  </span>
-                </div>
+                <span className="text-xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight leading-none">
+                  {stats?.totalUsers ?? 0}
+                </span>
+                <span className="text-[10px] sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5 sm:mt-1 block">
+                  Total Users
+                </span>
               </div>
 
               {/* Card 2: Startups Registered */}
-              <div className="p-6 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-2xl flex flex-col justify-between shadow-sm hover:border-sky-500/20 transition-all group">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center transition-transform group-hover:scale-110">
-                    <Rocket className="w-5 h-5" />
-                  </div>
+              <div className="p-3 sm:p-5 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center text-center shadow-sm lg:hover:border-sky-500/30 lg:hover:-translate-y-1 lg:hover:shadow-md transition-all duration-200 group">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center mb-2 sm:mb-3 transition-transform lg:group-hover:scale-110">
+                  <Rocket className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <div>
-                  <span className="text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight">
-                    {stats?.startupsRegistered ?? 0}
-                  </span>
-                  <span className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-1 block">
-                    Startups Registered
-                  </span>
-                </div>
+                <span className="text-xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight leading-none">
+                  {stats?.startupsRegistered ?? 0}
+                </span>
+                <span className="text-[10px] sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5 sm:mt-1 block">
+                  Startups Registered
+                </span>
               </div>
 
               {/* Card 3: Community Posts */}
-              <div className="p-6 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-2xl flex flex-col justify-between shadow-sm hover:border-purple-500/20 transition-all group">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center transition-transform group-hover:scale-110">
-                    <MessageSquare className="w-5 h-5" />
-                  </div>
+              <div className="p-3 sm:p-5 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center text-center shadow-sm lg:hover:border-purple-500/30 lg:hover:-translate-y-1 lg:hover:shadow-md transition-all duration-200 group">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center mb-2 sm:mb-3 transition-transform lg:group-hover:scale-110">
+                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <div>
-                  <span className="text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight">
-                    {stats?.projectsShared ?? 0}
-                  </span>
-                  <span className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-1 block">
-                    Community Posts
-                  </span>
-                </div>
+                <span className="text-xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight leading-none">
+                  {stats?.projectsShared ?? 0}
+                </span>
+                <span className="text-[10px] sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5 sm:mt-1 block">
+                  Community Posts
+                </span>
               </div>
 
               {/* Card 4: Active Members */}
-              <div className="p-6 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-2xl flex flex-col justify-between shadow-sm hover:border-emerald-500/20 transition-all group">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center relative transition-transform group-hover:scale-110">
-                    <Activity className="w-5 h-5" />
-                    <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900 animate-pulse" />
-                  </div>
+              <div className="p-3 sm:p-5 border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center text-center shadow-sm lg:hover:border-emerald-500/30 lg:hover:-translate-y-1 lg:hover:shadow-md transition-all duration-200 group">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-2 sm:mb-3 relative transition-transform lg:group-hover:scale-110">
+                  <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="absolute top-0 right-0 block h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900 animate-pulse" />
                 </div>
-                <div>
-                  <span className="text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight">
-                    {stats?.activeMembers ?? 0}
-                  </span>
-                  <span className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-1 block">
-                    Active Members
-                  </span>
-                </div>
+                <span className="text-xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white block tracking-tight leading-none">
+                  {stats?.activeMembers ?? 0}
+                </span>
+                <span className="text-[10px] sm:text-sm text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5 sm:mt-1 block">
+                  Active Members
+                </span>
               </div>
             </>
           )}
