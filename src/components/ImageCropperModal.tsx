@@ -101,8 +101,8 @@ export function ImageCropperModal({
     setNaturalDimensions({ width: naturalWidth, height: naturalHeight });
     setLoading(false);
 
-    // Initial scale calculation to fit the crop box
-    const minScale = Math.max(cropBox.width / naturalWidth, cropBox.height / naturalHeight);
+    // Initial scale calculation to fit the crop box entirely (contain)
+    const minScale = Math.min(cropBox.width / naturalWidth, cropBox.height / naturalHeight);
     const initialWidth = naturalWidth * minScale;
     const initialHeight = naturalHeight * minScale;
 
@@ -119,16 +119,31 @@ export function ImageCropperModal({
       return { minScale: 1, scale: 1, width: 0, height: 0, minX: 0, maxX: 0, minY: 0, maxY: 0 };
     }
 
-    const minScale = Math.max(cropBox.width / naturalDimensions.width, cropBox.height / naturalDimensions.height);
+    const minScale = Math.min(cropBox.width / naturalDimensions.width, cropBox.height / naturalDimensions.height);
     const scale = minScale * zoom;
     const width = naturalDimensions.width * scale;
     const height = naturalDimensions.height * scale;
 
-    // Offset boundaries (must cover the cropbox)
-    const minX = cropBox.width - width;
-    const maxX = 0;
-    const minY = cropBox.height - height;
-    const maxY = 0;
+    // Offset boundaries (center if smaller than cropbox, clamp boundaries if larger)
+    let minX = 0;
+    let maxX = 0;
+    if (width <= cropBox.width) {
+      minX = (cropBox.width - width) / 2;
+      maxX = minX;
+    } else {
+      minX = cropBox.width - width;
+      maxX = 0;
+    }
+
+    let minY = 0;
+    let maxY = 0;
+    if (height <= cropBox.height) {
+      minY = (cropBox.height - height) / 2;
+      maxY = minY;
+    } else {
+      minY = cropBox.height - height;
+      maxY = 0;
+    }
 
     return { minScale, scale, width, height, minX, maxX, minY, maxY };
   }, [naturalDimensions, cropBox, zoom]);
@@ -198,7 +213,7 @@ export function ImageCropperModal({
       if (touchStartDist.current > 10) {
         const factor = dist / touchStartDist.current;
         let nextZoom = touchStartZoom.current * factor;
-        nextZoom = Math.max(1.0, Math.min(3.0, nextZoom));
+        nextZoom = Math.max(1.0, Math.min(8.0, nextZoom));
         setZoom(nextZoom);
       }
     } else if (e.touches.length === 1 && !isPinching.current) {
@@ -225,6 +240,10 @@ export function ImageCropperModal({
 
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Failed to create canvas context.');
+
+      // Fill canvas with solid background to support contain fit strategy without empty transparent gaps
+      ctx.fillStyle = '#09090b';
+      ctx.fillRect(0, 0, outputSize.width, outputSize.height);
 
       // Source rectangle dimensions on original image resolution
       const sx = -offset.x / scale;
@@ -359,7 +378,7 @@ export function ImageCropperModal({
             <input
               type="range"
               min="1.00"
-              max="3.00"
+              max="8.00"
               step="0.01"
               value={zoom}
               onChange={(e) => setZoom(parseFloat(e.target.value))}
