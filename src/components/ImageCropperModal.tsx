@@ -109,15 +109,19 @@ export function ImageCropperModal({
     if (!naturalDimensions.width || !cropBox.width || isInitialized) return;
 
     const minScale = Math.max(cropBox.width / naturalDimensions.width, cropBox.height / naturalDimensions.height);
-    const initialWidth = naturalDimensions.width * minScale;
-    const initialHeight = naturalDimensions.height * minScale;
+    // Apply a slight initial zoom boost for banners so the subject is clearly visible
+    const initialZoom = isAvatar ? 1.0 : 1.35;
+    const scale = minScale * initialZoom;
+    const initialWidth = naturalDimensions.width * scale;
+    const initialHeight = naturalDimensions.height * scale;
 
+    setZoom(initialZoom);
     setOffset({
       x: (cropBox.width - initialWidth) / 2,
       y: (cropBox.height - initialHeight) / 2
     });
     setIsInitialized(true);
-  }, [naturalDimensions, cropBox, isInitialized]);
+  }, [naturalDimensions, cropBox, isInitialized, isAvatar]);
 
   // Math helper to calculate current minScale and rendered dimensions
   const getRenderDetails = useCallback(() => {
