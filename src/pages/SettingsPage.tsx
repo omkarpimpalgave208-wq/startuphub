@@ -212,7 +212,7 @@ export function SettingsPage() {
     setLoading(true);
     try {
       setBannerMessage('Checking image resolution...');
-      const dimensions = await checkImageResolution(file).catch(() => ({ width: 1500, height: 500 }));
+      const dimensions = await checkImageResolution(file).catch(() => ({ width: 2000, height: 500 }));
 
 
       let fileToUpload = file;

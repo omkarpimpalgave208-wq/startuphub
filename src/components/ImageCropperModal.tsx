@@ -22,6 +22,7 @@ export function ImageCropperModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Sizing & measuring wrapper
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -71,11 +72,11 @@ export function ImageCropperModal({
       })()
     : (() => {
         const width = Math.min(480, Math.max(150, wrapperSize.width - 32));
-        const height = width / 3;
+        const height = width / 4;
         return { width, height };
       })();
 
-  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 1500, height: 500 };
+  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 2000, height: 500 };
 
   // Read file into image source
   useEffect(() => {
@@ -89,29 +90,34 @@ export function ImageCropperModal({
     setError('');
     setZoom(1.0);
     setOffset({ x: 0, y: 0 });
+    setIsInitialized(false);
 
     return () => {
       URL.revokeObjectURL(url);
     };
   }, [imageFile]);
 
-  // Center image inside cropbox after loading dimensions
+  // Store natural dimensions on load
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget;
     setNaturalDimensions({ width: naturalWidth, height: naturalHeight });
     setLoading(false);
+  };
 
-    // Initial scale calculation to fit the crop box entirely (contain)
-    const minScale = Math.min(cropBox.width / naturalWidth, cropBox.height / naturalHeight);
-    const initialWidth = naturalWidth * minScale;
-    const initialHeight = naturalHeight * minScale;
+  // Center image on load or when cropBox dimensions are first resolved
+  useEffect(() => {
+    if (!naturalDimensions.width || !cropBox.width || isInitialized) return;
 
-    // Centered offset
+    const minScale = Math.max(cropBox.width / naturalDimensions.width, cropBox.height / naturalDimensions.height);
+    const initialWidth = naturalDimensions.width * minScale;
+    const initialHeight = naturalDimensions.height * minScale;
+
     setOffset({
       x: (cropBox.width - initialWidth) / 2,
       y: (cropBox.height - initialHeight) / 2
     });
-  };
+    setIsInitialized(true);
+  }, [naturalDimensions, cropBox, isInitialized]);
 
   // Math helper to calculate current minScale and rendered dimensions
   const getRenderDetails = useCallback(() => {
@@ -119,31 +125,17 @@ export function ImageCropperModal({
       return { minScale: 1, scale: 1, width: 0, height: 0, minX: 0, maxX: 0, minY: 0, maxY: 0 };
     }
 
-    const minScale = Math.min(cropBox.width / naturalDimensions.width, cropBox.height / naturalDimensions.height);
+    const minScale = Math.max(cropBox.width / naturalDimensions.width, cropBox.height / naturalDimensions.height);
     const scale = minScale * zoom;
     const width = naturalDimensions.width * scale;
     const height = naturalDimensions.height * scale;
 
-    // Offset boundaries (center if smaller than cropbox, clamp boundaries if larger)
-    let minX = 0;
-    let maxX = 0;
-    if (width <= cropBox.width) {
-      minX = (cropBox.width - width) / 2;
-      maxX = minX;
-    } else {
-      minX = cropBox.width - width;
-      maxX = 0;
-    }
-
-    let minY = 0;
-    let maxY = 0;
-    if (height <= cropBox.height) {
-      minY = (cropBox.height - height) / 2;
-      maxY = minY;
-    } else {
-      minY = cropBox.height - height;
-      maxY = 0;
-    }
+    // Enforce cover positioning boundaries so the crop box is always 100% filled
+    // This prevents any empty padding, transparent margins, or black/white bars in the cropped output
+    const minX = cropBox.width - width;
+    const maxX = 0;
+    const minY = cropBox.height - height;
+    const maxY = 0;
 
     return { minScale, scale, width, height, minX, maxX, minY, maxY };
   }, [naturalDimensions, cropBox, zoom]);
@@ -226,6 +218,15 @@ export function ImageCropperModal({
     endDrag();
   };
 
+  // Mouse wheel zoom handler for desktop users
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const zoomFactor = 0.05;
+    let nextZoom = zoom - e.deltaY * zoomFactor * 0.01;
+    nextZoom = Math.max(1.0, Math.min(8.0, nextZoom));
+    setZoom(nextZoom);
+  };
+
   // Generate cropped image and call save
   const handleSave = async () => {
     if (!imageRef.current || !naturalDimensions.width) return;
@@ -245,23 +246,25 @@ export function ImageCropperModal({
       ctx.fillStyle = '#09090b';
       ctx.fillRect(0, 0, outputSize.width, outputSize.height);
 
-      // Source rectangle dimensions on original image resolution
-      const sx = -offset.x / scale;
-      const sy = -offset.y / scale;
-      const sw = cropBox.width / scale;
-      const sh = cropBox.height / scale;
+      // Calculate proportional coordinates on the destination canvas
+      const canvasScale = outputSize.width / cropBox.width;
+      const dx = offset.x * canvasScale;
+      const dy = offset.y * canvasScale;
+      const dw = naturalDimensions.width * scale * canvasScale;
+      const dh = naturalDimensions.height * scale * canvasScale;
 
-      // Draw original image cropped section to canvas matching output resolution
+      // Draw the entire original image onto the destination coordinates of the canvas
+      // This supports negative coordinates and offsets correctly, padding empty regions
       ctx.drawImage(
         imageRef.current,
-        sx,
-        sy,
-        sw,
-        sh,
         0,
         0,
-        outputSize.width,
-        outputSize.height
+        naturalDimensions.width,
+        naturalDimensions.height,
+        dx,
+        dy,
+        dw,
+        dh
       );
 
       // Convert canvas drawing to Blob file
@@ -317,7 +320,7 @@ export function ImageCropperModal({
           </div>
 
           {/* Edit Area */}
-          <div ref={wrapperRef} className="flex-1 p-6 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20 min-h-[300px] relative overflow-hidden">
+          <div ref={wrapperRef} className="flex-1 p-6 flex items-center justify-center bg-zinc-950/40 dark:bg-zinc-950/20 min-h-[400px] relative overflow-hidden">
             {(loading || wrapperSize.width === 0) && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 bg-zinc-950/25 z-25 animate-fade-in">
                 <Loader2 className="w-8 h-8 animate-spin text-orange-500 mb-2" />
@@ -335,6 +338,7 @@ export function ImageCropperModal({
                 onTouchMove={handleTouchMove}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
+                onWheel={handleWheel}
                 className="relative select-none cursor-move touch-none bg-zinc-900/10 z-0"
                 style={{
                   width: `${cropBox.width}px`,
@@ -438,12 +442,12 @@ export function ImageCropperModal({
                   </span>
                 </div>
               ) : (
-                /* 3:1 Banner Preview */
+                /* 4:1 Banner Preview */
                 <div className="flex flex-col items-center gap-3 w-full px-4">
                   <div
                     className="relative overflow-hidden border border-orange-500 shadow-sm bg-zinc-100 dark:bg-zinc-800 rounded-lg w-full"
                     style={{
-                      height: '80px' // Exactly matches aspect ratio scale of 240px wide preview
+                      height: '60px' // Exactly matches aspect ratio scale of 240px wide preview
                     }}
                   >
                     {imageSrc && !loading && (
@@ -460,7 +464,7 @@ export function ImageCropperModal({
                     )}
                   </div>
                   <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest">
-                    Banner Crop Ratio (3:1)
+                    Banner Crop Ratio (4:1)
                   </span>
                 </div>
               )}
