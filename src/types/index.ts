@@ -33,6 +33,9 @@ export interface Profile {
   followers?: number;
   following?: number;
   connections?: number;
+  // Verification badges
+  student_verified?: boolean;
+  founder_verified?: boolean;
 }
 
 export interface ConnectionRequest {

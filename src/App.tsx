@@ -19,6 +19,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ defau
 const SignupPage = lazy(() => import('./pages/SignupPage').then(module => ({ default: module.SignupPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
 const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage').then(module => ({ default: module.ConnectionsPage })));
+const AdminVerificationsPage = lazy(() => import('./pages/AdminVerificationsPage').then(module => ({ default: module.AdminVerificationsPage })));
 const EditProductPage = lazy(() => import('./pages/EditProductPage').then(module => ({ default: module.EditProductPage })));
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then(module => ({ default: module.BookmarksPage })));
 const MessagesPage = lazy(() => import('./pages/MessagesPage').then(module => ({ default: module.MessagesPage })));
@@ -67,9 +68,9 @@ function App() {
             <Route path="messages" element={<MessagesPage />} />
             <Route path="messages/:conversationId" element={<MessagesPage />} />
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="bookmarks" element={<BookmarksPage />} />
+            <Route path="admin/verifications" element={<AdminVerificationsPage />} />
             
-            {/* Auth Routes */}
+            <Route path="bookmarks" element={<BookmarksPage />} />
             <Route path="login" element={<LoginPage />} />
             <Route path="signup" element={<SignupPage />} />
             

@@ -1870,6 +1870,33 @@ export const api = {
     };
   },
 
+  async getCommunityStats(): Promise<{
+    totalUsers: number;
+    startupsRegistered: number;
+    projectsShared: number;
+    activeMembers: number;
+  }> {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const [usersRes, startupsRes, projectsRes, activeRes] = await Promise.all([
+      supabase.from('profiles').select('*', { count: 'exact', head: true }),
+      supabase.from('products').select('*', { count: 'exact', head: true }),
+      supabase.from('discussions').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('last_seen', thirtyDaysAgo)
+    ]);
+
+    if (usersRes.error) throw usersRes.error;
+    if (startupsRes.error) throw startupsRes.error;
+    if (projectsRes.error) throw projectsRes.error;
+    if (activeRes.error) throw activeRes.error;
+
+    return {
+      totalUsers: usersRes.count ?? 0,
+      startupsRegistered: startupsRes.count ?? 0,
+      projectsShared: projectsRes.count ?? 0,
+      activeMembers: activeRes.count ?? 0
+    };
+  },
+
   // ==========================================
   // 7. MEMORY-SAFE REALTIME SUBSCRIPTIONS HELPER
   // ==========================================

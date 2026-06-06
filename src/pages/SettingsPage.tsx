@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { Avatar } from '../components/ui/Avatar';
-import { api } from '../lib/api';
+import { VerificationSection } from '../components/VerificationSection';
 import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
 import { CoverEditorModal } from '../components/CoverEditorModal';
 import { BannerImage } from '../components/BannerImage';
@@ -604,6 +604,7 @@ export function SettingsPage() {
               />
             </div>
           </div>
+        <VerificationSection />
 
           <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
             {saveError && (
