@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Github,
@@ -15,7 +15,8 @@ import {
   GraduationCap,
   Award,
   Activity,
-  Calendar
+  Calendar,
+  Camera
 } from 'lucide-react';
 import type { Profile, Product, Bookmark as SavedBookmark, ConnectionRequest, Discussion } from '../types';
 import { useAuthStore } from '../store/authStore';
@@ -26,6 +27,8 @@ import { api } from '../lib/api';
 import { isUserOnline, formatLastSeen } from '../utils/presence';
 import { BannerImage } from '../components/BannerImage';
 import { VerificationBadge } from '../components/VerificationBadge';
+import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
+import { toast } from '../store/toastStore';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -40,8 +43,14 @@ const SHOW_VERIFICATION_FEATURE = false;
 
 export function ProfilePage() {
   const { username } = useParams<{ username: string }>();
-  const { user } = useAuthStore();
+  const { user, fetchProfile: fetchAuthProfile } = useAuthStore();
   const navigate = useNavigate();
+  
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [bannerUploading, setBannerUploading] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [bookmarks, setBookmarks] = useState<SavedBookmark[]>([]);
@@ -200,6 +209,153 @@ export function ProfilePage() {
       subscriptions.forEach((unsubscribe) => unsubscribe());
     };
   }, [profile, user]);
+
+  const checkImageResolution = (file: File): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        };
+        img.onerror = () => {
+          reject(new Error('Failed to load image file.'));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to read file.'));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!user || !file) return;
+
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Unsupported image type. Use PNG, JPG, or WebP.');
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      let fileToUpload = file;
+      if (needsCompression(file, 1.0)) {
+        try {
+          const { file: compressedFile } = await optimizeImageFile(file, {
+            maxWidth: 800,
+            maxHeight: 800,
+            maxSizeMB: 1,
+            quality: 0.8
+          });
+          fileToUpload = compressedFile;
+        } catch (compressionErr: any) {
+          console.error('[ProfilePage] Avatar compression failed:', compressionErr);
+        }
+      }
+
+      const publicUrl = await api.uploadFile(fileToUpload, 'avatars');
+      await api.updateProfile(user.id, { avatar_url: publicUrl });
+      
+      // Update local states instantly
+      setProfile((prev) => prev ? { ...prev, avatar_url: publicUrl } : null);
+      
+      // Update store state for global navbar
+      await fetchAuthProfile(user.id);
+      
+      toast.success('Avatar updated successfully!');
+    } catch (err: any) {
+      console.error('[ProfilePage] Avatar upload error:', err);
+      toast.error(err?.message || 'Avatar upload failed.');
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
+
+  const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!user || !file) return;
+
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Unsupported image type. Use PNG, JPG, or WebP.');
+      return;
+    }
+
+    setBannerUploading(true);
+    try {
+      const dimensions = await checkImageResolution(file).catch(() => ({ width: 1500, height: 500 }));
+
+      let fileToUpload = file;
+      if (needsCompression(file, 4.0)) {
+        try {
+          const { file: compressedFile } = await optimizeImageFile(file, {
+            maxWidth: 2400,
+            maxHeight: 1600,
+            maxSizeMB: 3.5,
+            quality: 0.90
+          });
+          fileToUpload = compressedFile;
+        } catch (compressionErr: any) {
+          console.error('[ProfilePage] Banner compression failed:', compressionErr);
+        }
+      }
+
+      const publicUrl = await api.uploadFile(fileToUpload, 'banners');
+
+      const defaultZoom = 1.0;
+      const defaultPosX = 0.5;
+      const defaultPosY = 0.35;
+
+      try {
+        localStorage.setItem(PROFILE_COVER_KEY(user.id), publicUrl);
+        localStorage.setItem(PROFILE_COVER_STYLE_KEY(user.id), 'gradient-1');
+        localStorage.setItem(`startuphub_cover_zoom_${user.id}`, String(defaultZoom));
+        localStorage.setItem(`startuphub_cover_focus_${user.id}`, `${defaultPosX},${defaultPosY}`);
+      } catch (storageErr) {
+        console.warn('Storage sync error:', storageErr);
+      }
+
+      await api.updateProfile(user.id, {
+        banner_url: publicUrl,
+        banner_zoom: defaultZoom,
+        banner_position_x: defaultPosX,
+        banner_position_y: defaultPosY,
+        original_image_width: dimensions.width,
+        original_image_height: dimensions.height
+      });
+
+      // Update local states instantly
+      setCoverUrl(publicUrl);
+      setCoverZoom(defaultZoom);
+      setCoverPositionX(defaultPosX);
+      setCoverPositionY(defaultPosY);
+      setProfile((prev) => prev ? {
+        ...prev,
+        banner_url: publicUrl,
+        banner_zoom: defaultZoom,
+        banner_position_x: defaultPosX,
+        banner_position_y: defaultPosY,
+        original_image_width: dimensions.width,
+        original_image_height: dimensions.height
+      } : null);
+
+      // Update store state
+      await fetchAuthProfile(user.id);
+
+      toast.success('Banner updated successfully!');
+    } catch (err: any) {
+      console.error('[ProfilePage] Banner upload error:', err);
+      toast.error(err?.message || 'Banner upload failed.');
+    } finally {
+      setBannerUploading(false);
+      if (bannerInputRef.current) bannerInputRef.current.value = '';
+    }
+  };
 
   const fetchIncomingRequests = async (userId: string) => {
     try {
@@ -510,6 +666,25 @@ export function ProfilePage() {
 
   return (
     <div className="w-full min-h-dvh bg-zinc-50 dark:bg-zinc-900 pb-12">
+      {/* Hidden file inputs for profile page updates */}
+      {isOwnProfile && (
+        <>
+          <input
+            type="file"
+            ref={avatarInputRef}
+            onChange={handleAvatarChange}
+            accept="image/png, image/jpeg, image/webp"
+            className="hidden"
+          />
+          <input
+            type="file"
+            ref={bannerInputRef}
+            onChange={handleBannerChange}
+            accept="image/png, image/jpeg, image/webp"
+            className="hidden"
+          />
+        </>
+      )}
 
       {/* ─── Cover + Avatar wrapper ─────────────────────────────────────────── */}
       {/* Avatar is a sibling of the cover, positioned absolutely so it can
@@ -518,8 +693,9 @@ export function ProfilePage() {
 
         {/* Cover Banner */}
         <div
-          className="relative w-full overflow-hidden bg-zinc-950"
+          className={`relative w-full overflow-hidden bg-zinc-950 ${isOwnProfile ? 'cursor-pointer group' : ''}`}
           style={{ height: 'clamp(220px, 35vh, 320px)' }}
+          onClick={isOwnProfile ? () => bannerInputRef.current?.click() : undefined}
         >
           {coverUrl ? (
             <BannerImage
@@ -533,11 +709,27 @@ export function ProfilePage() {
             <div className={`absolute inset-0 ${bannerStyles[coverStyle]}`} />
           )}
 
+          {/* Banner Hover Overlay (LinkedIn/X Style) */}
+          {isOwnProfile && (
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 flex flex-col items-center justify-center gap-2 text-white">
+              <Camera className="w-8 h-8 text-white drop-shadow" />
+              <span className="text-xs font-bold uppercase tracking-wider drop-shadow">Change Cover Photo</span>
+            </div>
+          )}
+
+          {/* Banner Uploading Loader */}
+          {bannerUploading && (
+            <div className="absolute inset-0 bg-black/60 z-30 flex items-center justify-center gap-2 text-white">
+              <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+              <span className="text-sm font-semibold">Uploading cover...</span>
+            </div>
+          )}
+
           {/* Gradient overlay — bottom fade so avatar area reads cleanly */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40 z-10 pointer-events-none" />
 
           {/* Floating controls */}
-          <div className="absolute inset-x-0 top-4 z-20">
+          <div className="absolute inset-x-0 top-4 z-20" onClick={(e) => e.stopPropagation()}>
             <div className="max-w-5xl mx-auto px-4 md:px-6 w-full flex items-center justify-between">
               <Link
                 to="/"
@@ -548,12 +740,13 @@ export function ProfilePage() {
               </Link>
 
               {isOwnProfile && (
-                <Link
-                  to="/settings"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm hover:bg-black/70 active:scale-95 transition-all shadow-md"
+                <button
+                  onClick={() => bannerInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm hover:bg-black/70 active:scale-95 transition-all shadow-md cursor-pointer"
                 >
-                  <span>Edit Cover</span>
-                </Link>
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Change Cover</span>
+                </button>
               )}
             </div>
           </div>
@@ -565,13 +758,30 @@ export function ProfilePage() {
           <div className="w-full lg:pl-[260px]">
             <div className="w-full max-w-5xl mx-auto px-4 md:px-6">
               <div
-                className="w-[88px] h-[88px] sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full border-4 border-white dark:border-zinc-950 shadow-xl bg-zinc-100 dark:bg-zinc-800 overflow-hidden pointer-events-auto flex-shrink-0"
+                className={`w-[88px] h-[88px] sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full border-4 border-white dark:border-zinc-950 shadow-xl bg-zinc-100 dark:bg-zinc-800 overflow-hidden pointer-events-auto flex-shrink-0 relative ${
+                  isOwnProfile ? 'cursor-pointer group' : ''
+                }`}
+                onClick={isOwnProfile ? () => avatarInputRef.current?.click() : undefined}
               >
                 <Avatar
                   src={profile.avatar_url}
                   alt={profile.full_name || profile.username}
                   className="w-full h-full object-cover"
                 />
+
+                {/* Avatar Hover Overlay (LinkedIn/X Style) */}
+                {isOwnProfile && (
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center text-white z-10">
+                    <Camera className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </div>
+                )}
+
+                {/* Avatar Uploading Loader */}
+                {avatarUploading && (
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-20">
+                    <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin text-orange-500" />
+                  </div>
+                )}
               </div>
             </div>
           </div>
