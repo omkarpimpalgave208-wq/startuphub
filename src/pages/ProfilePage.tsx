@@ -340,7 +340,7 @@ export function ProfilePage() {
           banner_zoom: defaultZoom,
           banner_position_x: defaultPosX,
           banner_position_y: defaultPosY,
-          original_image_width: 2000,
+          original_image_width: 1500,
           original_image_height: 500
         });
 
@@ -355,7 +355,7 @@ export function ProfilePage() {
           banner_zoom: defaultZoom,
           banner_position_x: defaultPosX,
           banner_position_y: defaultPosY,
-          original_image_width: 2000,
+          original_image_width: 1500,
           original_image_height: 500
         } : null);
 

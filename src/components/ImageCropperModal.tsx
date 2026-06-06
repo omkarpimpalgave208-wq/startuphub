@@ -71,12 +71,12 @@ export function ImageCropperModal({
         return { width: side, height: side };
       })()
     : (() => {
-        const width = Math.min(480, Math.max(150, wrapperSize.width - 32));
-        const height = width / 4;
+        const width = Math.min(600, Math.max(150, wrapperSize.width - 32));
+        const height = width / 3;
         return { width, height };
       })();
 
-  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 2000, height: 500 };
+  const outputSize = isAvatar ? { width: 512, height: 512 } : { width: 1500, height: 500 };
 
   // Read file into image source
   useEffect(() => {
@@ -442,12 +442,12 @@ export function ImageCropperModal({
                   </span>
                 </div>
               ) : (
-                /* 4:1 Banner Preview */
+                /* 3:1 Banner Preview */
                 <div className="flex flex-col items-center gap-3 w-full px-4">
                   <div
                     className="relative overflow-hidden border border-orange-500 shadow-sm bg-zinc-100 dark:bg-zinc-800 rounded-lg w-full"
                     style={{
-                      height: '60px' // Exactly matches aspect ratio scale of 240px wide preview
+                      height: '80px' // Matches 3:1 aspect ratio for 240px wide preview
                     }}
                   >
                     {imageSrc && !loading && (
@@ -464,7 +464,7 @@ export function ImageCropperModal({
                     )}
                   </div>
                   <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest">
-                    Banner Crop Ratio (4:1)
+                    Banner Crop Ratio (3:1)
                   </span>
                 </div>
               )}
