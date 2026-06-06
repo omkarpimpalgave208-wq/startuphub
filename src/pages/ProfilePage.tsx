@@ -29,6 +29,7 @@ import { BannerImage } from '../components/BannerImage';
 import { VerificationBadge } from '../components/VerificationBadge';
 import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
 import { toast } from '../store/toastStore';
+import { ImageCropperModal } from '../components/ImageCropperModal';
 
 const PROFILE_COVER_KEY = (id: string) => `startuphub_cover_${id}`;
 const PROFILE_COVER_STYLE_KEY = (id: string) => `startuphub_cover_style_${id}`;
@@ -51,6 +52,9 @@ export function ProfilePage() {
   
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [bannerUploading, setBannerUploading] = useState(false);
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const [cropperFile, setCropperFile] = useState<File | null>(null);
+  const [cropperType, setCropperType] = useState<'avatar' | 'banner'>('avatar');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [bookmarks, setBookmarks] = useState<SavedBookmark[]>([]);
@@ -230,7 +234,7 @@ export function ProfilePage() {
     });
   };
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!user || !file) return;
 
@@ -240,43 +244,12 @@ export function ProfilePage() {
       return;
     }
 
-    setAvatarUploading(true);
-    try {
-      let fileToUpload = file;
-      if (needsCompression(file, 1.0)) {
-        try {
-          const { file: compressedFile } = await optimizeImageFile(file, {
-            maxWidth: 800,
-            maxHeight: 800,
-            maxSizeMB: 1,
-            quality: 0.8
-          });
-          fileToUpload = compressedFile;
-        } catch (compressionErr: any) {
-          console.error('[ProfilePage] Avatar compression failed:', compressionErr);
-        }
-      }
-
-      const publicUrl = await api.uploadFile(fileToUpload, 'avatars');
-      await api.updateProfile(user.id, { avatar_url: publicUrl });
-      
-      // Update local states instantly
-      setProfile((prev) => prev ? { ...prev, avatar_url: publicUrl } : null);
-      
-      // Update store state for global navbar
-      await fetchAuthProfile(user.id);
-      
-      toast.success('Avatar updated successfully!');
-    } catch (err: any) {
-      console.error('[ProfilePage] Avatar upload error:', err);
-      toast.error(err?.message || 'Avatar upload failed.');
-    } finally {
-      setAvatarUploading(false);
-      if (avatarInputRef.current) avatarInputRef.current.value = '';
-    }
+    setCropperFile(file);
+    setCropperType('avatar');
+    setCropperOpen(true);
   };
 
-  const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!user || !file) return;
 
@@ -286,74 +259,117 @@ export function ProfilePage() {
       return;
     }
 
-    setBannerUploading(true);
-    try {
-      const dimensions = await checkImageResolution(file).catch(() => ({ width: 1500, height: 500 }));
+    setCropperFile(file);
+    setCropperType('banner');
+    setCropperOpen(true);
+  };
 
-      let fileToUpload = file;
-      if (needsCompression(file, 4.0)) {
-        try {
-          const { file: compressedFile } = await optimizeImageFile(file, {
-            maxWidth: 2400,
-            maxHeight: 1600,
-            maxSizeMB: 3.5,
-            quality: 0.90
-          });
-          fileToUpload = compressedFile;
-        } catch (compressionErr: any) {
-          console.error('[ProfilePage] Banner compression failed:', compressionErr);
-        }
-      }
+  const handleCroppedSave = async (croppedFile: File) => {
+    if (!user) return;
 
-      const publicUrl = await api.uploadFile(fileToUpload, 'banners');
-
-      const defaultZoom = 1.0;
-      const defaultPosX = 0.5;
-      const defaultPosY = 0.35;
-
+    if (cropperType === 'avatar') {
+      setAvatarUploading(true);
       try {
-        localStorage.setItem(PROFILE_COVER_KEY(user.id), publicUrl);
-        localStorage.setItem(PROFILE_COVER_STYLE_KEY(user.id), 'gradient-1');
-        localStorage.setItem(`startuphub_cover_zoom_${user.id}`, String(defaultZoom));
-        localStorage.setItem(`startuphub_cover_focus_${user.id}`, `${defaultPosX},${defaultPosY}`);
-      } catch (storageErr) {
-        console.warn('Storage sync error:', storageErr);
+        let fileToUpload = croppedFile;
+        if (needsCompression(croppedFile, 1.0)) {
+          try {
+            const { file: compressedFile } = await optimizeImageFile(croppedFile, {
+              maxWidth: 800,
+              maxHeight: 800,
+              maxSizeMB: 1,
+              quality: 0.8
+            });
+            fileToUpload = compressedFile;
+          } catch (compressionErr: any) {
+            console.error('[ProfilePage] Avatar compression failed:', compressionErr);
+          }
+        }
+
+        const publicUrl = await api.uploadFile(fileToUpload, 'avatars');
+        await api.updateProfile(user.id, { avatar_url: publicUrl });
+
+        // Update local states instantly
+        setProfile((prev) => prev ? { ...prev, avatar_url: publicUrl } : null);
+
+        // Update store state for global navbar
+        await fetchAuthProfile(user.id);
+
+        toast.success('Avatar updated successfully!');
+      } catch (err: any) {
+        console.error('[ProfilePage] Avatar upload error:', err);
+        toast.error(err?.message || 'Avatar upload failed.');
+      } finally {
+        setAvatarUploading(false);
+        if (avatarInputRef.current) avatarInputRef.current.value = '';
       }
+    } else {
+      setBannerUploading(true);
+      try {
+        let fileToUpload = croppedFile;
+        if (needsCompression(croppedFile, 4.0)) {
+          try {
+            const { file: compressedFile } = await optimizeImageFile(croppedFile, {
+              maxWidth: 2400,
+              maxHeight: 1600,
+              maxSizeMB: 3.5,
+              quality: 0.90
+            });
+            fileToUpload = compressedFile;
+          } catch (compressionErr: any) {
+            console.error('[ProfilePage] Banner compression failed:', compressionErr);
+          }
+        }
 
-      await api.updateProfile(user.id, {
-        banner_url: publicUrl,
-        banner_zoom: defaultZoom,
-        banner_position_x: defaultPosX,
-        banner_position_y: defaultPosY,
-        original_image_width: dimensions.width,
-        original_image_height: dimensions.height
-      });
+        const publicUrl = await api.uploadFile(fileToUpload, 'banners');
 
-      // Update local states instantly
-      setCoverUrl(publicUrl);
-      setCoverZoom(defaultZoom);
-      setCoverPositionX(defaultPosX);
-      setCoverPositionY(defaultPosY);
-      setProfile((prev) => prev ? {
-        ...prev,
-        banner_url: publicUrl,
-        banner_zoom: defaultZoom,
-        banner_position_x: defaultPosX,
-        banner_position_y: defaultPosY,
-        original_image_width: dimensions.width,
-        original_image_height: dimensions.height
-      } : null);
+        const defaultZoom = 1.0;
+        const defaultPosX = 0.5;
+        const defaultPosY = 0.35;
 
-      // Update store state
-      await fetchAuthProfile(user.id);
+        try {
+          localStorage.setItem(PROFILE_COVER_KEY(user.id), publicUrl);
+          localStorage.setItem(PROFILE_COVER_STYLE_KEY(user.id), 'gradient-1');
+          localStorage.setItem(`startuphub_cover_zoom_${user.id}`, String(defaultZoom));
+          localStorage.setItem(`startuphub_cover_focus_${user.id}`, `${defaultPosX},${defaultPosY}`);
+        } catch (storageErr) {
+          console.warn('Storage sync error:', storageErr);
+        }
 
-      toast.success('Banner updated successfully!');
-    } catch (err: any) {
-      console.error('[ProfilePage] Banner upload error:', err);
-      toast.error(err?.message || 'Banner upload failed.');
-    } finally {
-      setBannerUploading(false);
-      if (bannerInputRef.current) bannerInputRef.current.value = '';
+        await api.updateProfile(user.id, {
+          banner_url: publicUrl,
+          banner_zoom: defaultZoom,
+          banner_position_x: defaultPosX,
+          banner_position_y: defaultPosY,
+          original_image_width: 1500,
+          original_image_height: 500
+        });
+
+        // Update local states instantly
+        setCoverUrl(publicUrl);
+        setCoverZoom(defaultZoom);
+        setCoverPositionX(defaultPosX);
+        setCoverPositionY(defaultPosY);
+        setProfile((prev) => prev ? {
+          ...prev,
+          banner_url: publicUrl,
+          banner_zoom: defaultZoom,
+          banner_position_x: defaultPosX,
+          banner_position_y: defaultPosY,
+          original_image_width: 1500,
+          original_image_height: 500
+        } : null);
+
+        // Update store state
+        await fetchAuthProfile(user.id);
+
+        toast.success('Banner updated successfully!');
+      } catch (err: any) {
+        console.error('[ProfilePage] Banner upload error:', err);
+        toast.error(err?.message || 'Banner upload failed.');
+      } finally {
+        setBannerUploading(false);
+        if (bannerInputRef.current) bannerInputRef.current.value = '';
+      }
     }
   };
 
@@ -683,6 +699,15 @@ export function ProfilePage() {
             accept="image/png, image/jpeg, image/webp"
             className="hidden"
           />
+          {cropperOpen && (
+            <ImageCropperModal
+              isOpen={cropperOpen}
+              onClose={() => { setCropperOpen(false); setCropperFile(null); }}
+              imageFile={cropperFile}
+              cropType={cropperType}
+              onSave={handleCroppedSave}
+            />
+          )}
         </>
       )}
 
