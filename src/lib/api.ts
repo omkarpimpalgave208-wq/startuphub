@@ -113,6 +113,49 @@ export const api = {
       console.error('[api.createProduct] Supabase error:', error);
       throw error;
     }
+
+    // Award "First Startup Launched" achievement if this is their first product
+    try {
+      const { count, error: countError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', productData.user_id);
+
+      if (!countError && count === 1) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('achievements')
+          .eq('id', productData.user_id)
+          .single();
+
+        const achievements = profileData?.achievements || [];
+        const hasBadge = achievements.some((a: string) => {
+          try {
+            const parsed = JSON.parse(a);
+            return parsed.id === 'first_startup';
+          } catch {
+            return a === 'First Startup Launched';
+          }
+        });
+
+        if (!hasBadge) {
+          const badgeData = JSON.stringify({
+            id: 'first_startup',
+            startupName: data.name,
+            earnedDate: data.created_at
+          });
+          await supabase
+            .from('profiles')
+            .update({
+              achievements: [...achievements, badgeData]
+            })
+            .eq('id', productData.user_id);
+        }
+      }
+    } catch (achErr) {
+      console.error('[api.createProduct] Error awarding first startup badge:', achErr);
+    }
+
     return data as unknown as Product;
   },
 

@@ -27,6 +27,7 @@ import { api } from '../lib/api';
 import { isUserOnline, formatLastSeen } from '../utils/presence';
 import { BannerImage } from '../components/BannerImage';
 import { VerificationBadge } from '../components/VerificationBadge';
+import { FirstStartupBadge } from '../components/FirstStartupBadge';
 import { optimizeImageFile, needsCompression, formatFileSize } from '../lib/imageCompression';
 import { toast } from '../store/toastStore';
 import { ImageCropperModal } from '../components/ImageCropperModal';
@@ -680,6 +681,25 @@ export function ProfilePage() {
     );
   };
 
+  const textAchievements = (profile.achievements || []).filter(ach => {
+    try {
+      const parsed = JSON.parse(ach);
+      return parsed.id !== 'first_startup';
+    } catch {
+      return true;
+    }
+  });
+
+  const badgeAchievements = (profile.achievements || []).map(ach => {
+    try {
+      const parsed = JSON.parse(ach);
+      if (parsed.id === 'first_startup') return parsed;
+      return null;
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+
   return (
     <div className="w-full min-h-dvh bg-zinc-50 dark:bg-zinc-900 pb-12">
       {/* Hidden file inputs for profile page updates */}
@@ -1127,8 +1147,28 @@ export function ProfilePage() {
                 )}
               </section>
 
+              {/* Badges Section */}
+              {badgeAchievements.length > 0 && (
+                <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-200 dark:border-zinc-900/60 mt-6">
+                  <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white mb-6">
+                    <Award className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                    <h2 className="text-lg font-bold tracking-tight">Badges</h2>
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    {badgeAchievements.map((badge, idx) => (
+                      <FirstStartupBadge
+                        key={idx}
+                        startupName={badge.startupName}
+                        founderName={profile.full_name || profile.username}
+                        earnedDate={new Date(badge.earnedDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* Skills & Achievements Section */}
-              {((profile.skills && profile.skills.length > 0) || (profile.achievements && profile.achievements.length > 0)) && (
+              {((profile.skills && profile.skills.length > 0) || (textAchievements.length > 0)) && (
                 <section className="px-4 md:px-8 pt-6 text-left border-t border-zinc-200 dark:border-zinc-900/60 mt-6">
                   <div className="grid gap-6 md:grid-cols-2">
                     {/* Skills Column */}
@@ -1152,14 +1192,14 @@ export function ProfilePage() {
                     )}
                     
                     {/* Achievements Column */}
-                    {profile.achievements && profile.achievements.length > 0 && (
+                    {textAchievements.length > 0 && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-2.5 text-zinc-900 dark:text-white">
                           <Award className="w-5 h-5 text-violet-500 flex-shrink-0" />
                           <h3 className="text-base font-bold tracking-tight">Focus & Achievements</h3>
                         </div>
                         <div className="grid gap-3">
-                          {profile.achievements.map((ach) => (
+                          {textAchievements.map((ach) => (
                             <div 
                               key={ach} 
                               className="flex items-start gap-2.5 p-3.5 rounded-xl border border-zinc-100 dark:border-zinc-900 bg-zinc-50/30 dark:bg-zinc-950/20"
