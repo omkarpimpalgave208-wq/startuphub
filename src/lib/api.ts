@@ -139,17 +139,42 @@ export const api = {
         });
 
         if (!hasBadge) {
-          const badgeData = JSON.stringify({
-            id: 'first_startup',
-            startupName: data.name,
-            earnedDate: data.created_at
-          });
-          await supabase
-            .from('profiles')
-            .update({
-              achievements: [...achievements, badgeData]
-            })
-            .eq('id', productData.user_id);
+          try {
+            const { generateBadgeImage } = await import('./badgeGenerator');
+            const founderName = data.profiles?.full_name || 'Founder';
+            const earnedDate = new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            
+            const badgeFile = await generateBadgeImage(data.name, founderName, earnedDate);
+            const imageUrl = await api.uploadFile(badgeFile, 'badges');
+
+            const badgeData = JSON.stringify({
+              id: 'first_startup',
+              startupName: data.name,
+              founderName: founderName,
+              earnedDate: earnedDate,
+              imageUrl: imageUrl
+            });
+            await supabase
+              .from('profiles')
+              .update({
+                achievements: [...achievements, badgeData]
+              })
+              .eq('id', productData.user_id);
+          } catch (e) {
+            console.error('Failed to generate or upload badge image:', e);
+            // Fallback to old format if generation fails
+            const badgeData = JSON.stringify({
+              id: 'first_startup',
+              startupName: data.name,
+              earnedDate: data.created_at
+            });
+            await supabase
+              .from('profiles')
+              .update({
+                achievements: [...achievements, badgeData]
+              })
+              .eq('id', productData.user_id);
+          }
         }
       }
     } catch (achErr) {

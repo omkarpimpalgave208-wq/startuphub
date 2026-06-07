@@ -1160,7 +1160,8 @@ export function ProfilePage() {
                         key={idx}
                         startupName={badge.startupName}
                         founderName={profile.full_name || profile.username}
-                        earnedDate={new Date(badge.earnedDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                        earnedDate={new Date(badge.earnedDate || badge.created_at || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                        imageUrl={badge.imageUrl}
                       />
                     ))}
                   </div>

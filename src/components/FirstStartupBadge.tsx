@@ -1,35 +1,59 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Download, Linkedin, Loader2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { generateBadgeImage } from '../lib/badgeGenerator';
 
 interface FirstStartupBadgeProps {
   startupName: string;
   founderName: string;
   earnedDate: string;
+  imageUrl?: string;
 }
 
-export function FirstStartupBadge({ startupName, founderName, earnedDate }: FirstStartupBadgeProps) {
+export function FirstStartupBadge({ startupName, founderName, earnedDate, imageUrl }: FirstStartupBadgeProps) {
   const badgeRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [testImageUrl, setTestImageUrl] = useState<string | null>(imageUrl || null);
+
+  useEffect(() => {
+    if (!testImageUrl) {
+      generateBadgeImage(startupName, founderName, earnedDate).then(file => {
+        setTestImageUrl(URL.createObjectURL(file));
+      }).catch(console.error);
+    }
+  }, [startupName, founderName, earnedDate, testImageUrl]);
 
   const handleDownload = async () => {
-    if (!badgeRef.current) return;
-    
     try {
       setIsDownloading(true);
-      const canvas = await html2canvas(badgeRef.current, {
-        scale: 3, 
-        useCORS: true,
-        backgroundColor: null,
-      });
       
-      const image = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = image;
-      link.download = 'first-startup-badge.png';
-      link.click();
+      if (testImageUrl) {
+        // Fetch and download the generated image directly
+        const response = await fetch(testImageUrl);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `first-startup-badge-${startupName}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // Fallback for old badges
+        if (!badgeRef.current) return;
+        const canvas = await html2canvas(badgeRef.current, {
+          scale: 3, 
+          useCORS: true,
+          backgroundColor: null,
+        });
+        
+        const image = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = 'first-startup-badge.png';
+        link.click();
+      }
     } catch (error) {
-      console.error('Error generating badge image:', error);
+      console.error('Error downloading badge image:', error);
       alert('Failed to download the badge. Please try again.');
     } finally {
       setIsDownloading(false);
@@ -49,40 +73,48 @@ export function FirstStartupBadge({ startupName, founderName, earnedDate }: Firs
   return (
     <div className="flex flex-col items-center w-full max-w-sm mx-auto gap-4">
       {/* THE BADGE */}
-      <div 
-        ref={badgeRef} 
-        className="relative w-full aspect-[4/5] rounded-xl overflow-hidden shadow-[0_10px_40px_rgba(245,158,11,0.15)] font-sans bg-black"
-      >
-        {/* Approved Badge Image Template */}
+      {testImageUrl ? (
         <img 
-          src="/badge-template.png" 
-          alt="First Startup Badge Template" 
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-          crossOrigin="anonymous"
+          src={testImageUrl} 
+          alt="First Startup Badge" 
+          className="w-full aspect-[301/221] rounded-xl shadow-[0_10px_40px_rgba(245,158,11,0.15)] object-contain bg-black"
         />
+      ) : (
+        <div 
+          ref={badgeRef} 
+          className="relative w-full aspect-[4/5] rounded-xl overflow-hidden shadow-[0_10px_40px_rgba(245,158,11,0.15)] font-sans bg-black"
+        >
+          {/* Approved Badge Image Template */}
+          <img 
+            src="/badge-template.png" 
+            alt="First Startup Badge Template" 
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            crossOrigin="anonymous"
+          />
 
-        {/* Dynamic Text Overlay */}
-        <div className="absolute inset-0 flex flex-col justify-end pb-8">
-          <div className="w-full text-center px-6 space-y-4">
-            <div>
-              <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Startup</p>
-              <p className="text-xl text-white font-black truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{startupName}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Founder</p>
-              <p className="text-base text-zinc-200 font-bold truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{founderName}</p>
-            </div>
-            
-            {/* Decorative Divider */}
-            <div className="w-1/2 mx-auto h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent my-2"></div>
+          {/* Dynamic Text Overlay */}
+          <div className="absolute inset-0 flex flex-col justify-end pb-8">
+            <div className="w-full text-center px-6 space-y-4">
+              <div>
+                <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Startup</p>
+                <p className="text-xl text-white font-black truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{startupName}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Founder</p>
+                <p className="text-base text-zinc-200 font-bold truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{founderName}</p>
+              </div>
+              
+              {/* Decorative Divider */}
+              <div className="w-1/2 mx-auto h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent my-2"></div>
 
-            <div>
-              <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Earned Date</p>
-              <p className="text-xs text-amber-400/90 font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{earnedDate}</p>
+              <div>
+                <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Earned Date</p>
+                <p className="text-xs text-amber-400/90 font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{earnedDate}</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex gap-3 w-full mt-2">
