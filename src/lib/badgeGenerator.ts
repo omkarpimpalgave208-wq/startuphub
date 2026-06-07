@@ -31,12 +31,28 @@ export async function generateBadgeImage(
       // Erase the date text (May 25, 2025)
       ctx.fillRect(180, 190, 100, 20); 
 
+      // Helper to truncate text with ellipsis if it exceeds max width
+      const truncateText = (text: string, maxWidth: number) => {
+        if (ctx.measureText(text).width <= maxWidth) return text;
+        let truncated = text;
+        while (ctx.measureText(truncated + '...').width > maxWidth && truncated.length > 0) {
+          truncated = truncated.slice(0, -1);
+        }
+        return truncated + '...';
+      };
+
       // Now draw the new text
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#facc15'; // Amber-400
-      ctx.fillText(startupName, 198, 137);
       
-      ctx.fillText(founderName, 198, 160);
+      // Maximum width allowed before hitting the right edge of the 301px image (with 8px padding)
+      const MAX_WIDTH = 95;
+      
+      const safeStartupName = truncateText(startupName, MAX_WIDTH);
+      ctx.fillText(safeStartupName, 198, 137);
+      
+      const safeFounderName = truncateText(founderName, MAX_WIDTH);
+      ctx.fillText(safeFounderName, 198, 160);
       
       ctx.font = '10px sans-serif';
       ctx.fillStyle = '#d4d4d8'; // zinc-300
