@@ -337,26 +337,25 @@ export function LaunchPage() {
                 }
               >
                 {bannerPreview ? (
-                  <div className="relative w-full" style={{ height: 220 }}>
+                  <div className="relative w-full flex items-center justify-center overflow-hidden bg-zinc-900">
                     <img
                       src={bannerPreview}
                       alt="Banner preview"
                       style={{
-                        position: 'absolute',
-                        inset: 0,
+                        display: 'block',
                         width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
+                        height: 'auto',
+                        objectFit: 'contain',
                         objectPosition: `${bannerFocus.x}% ${bannerFocus.y}%`,
                         transform: `scale(${bannerZoom})`,
                         transformOrigin: 'center center',
                       }}
                     />
-                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5), rgba(0,0,0,0.1) 40%, transparent)' }} />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
                     <button
                       type="button"
                       onClick={removeBanner}
-                      className="absolute right-3 top-3 rounded-full bg-black/60 text-white p-2 hover:bg-black/80 transition"
+                      className="absolute right-3 top-3 rounded-full bg-black/60 text-white p-2 hover:bg-black/80 transition z-10"
                     >
                       <X className="w-4 h-4" />
                     </button>
