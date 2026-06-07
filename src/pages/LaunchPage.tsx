@@ -335,20 +335,24 @@ export function LaunchPage() {
                   ${draggingBanner ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/20' : 'border-zinc-300 dark:border-zinc-700'}
                   ${errors.banner ? 'border-red-300' : ''}`
                 }
-                style={{ minHeight: 180 }}
               >
                 {bannerPreview ? (
-                  <div className="relative h-full w-full overflow-hidden bg-black/5">
+                  <div className="relative w-full" style={{ height: 220 }}>
                     <img
                       src={bannerPreview}
                       alt="Banner preview"
-                      className="absolute inset-0 w-full h-full object-cover"
                       style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
                         objectPosition: `${bannerFocus.x}% ${bannerFocus.y}%`,
-                        transform: `scale(${bannerZoom})`
+                        transform: `scale(${bannerZoom})`,
+                        transformOrigin: 'center center',
                       }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5), rgba(0,0,0,0.1) 40%, transparent)' }} />
                     <button
                       type="button"
                       onClick={removeBanner}
@@ -358,7 +362,7 @@ export function LaunchPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center gap-2 py-8 px-4 text-center text-zinc-500">
+                  <div className="flex flex-col items-center justify-center gap-2 py-12 px-4 text-center text-zinc-500" style={{ minHeight: 180 }}>
                     <ImageIcon className="w-8 h-8" />
                     <p className="text-sm font-medium">Drag & drop or click to upload</p>
                     <p className="text-xs">JPG, PNG, or WEBP up to 10MB</p>
