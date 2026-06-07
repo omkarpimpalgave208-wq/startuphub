@@ -242,21 +242,23 @@ export function ProductPage() {
       >
         {/* Banner */}
         {product.banner_image_url ? (
-          <div className="relative w-full overflow-hidden rounded-t-3xl" style={{ height: 288 }}>
+          <div
+            className="w-full rounded-t-3xl overflow-hidden flex items-center justify-center"
+            style={{ background: '#18181b' }}
+          >
             <img
               src={product.banner_image_url}
               alt={product.name}
               loading="lazy"
               style={{
-                position: 'absolute',
-                inset: 0,
+                display: 'block',
                 width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                objectPosition: '50% 50%',
+                height: 'auto',
+                maxHeight: 480,
+                objectFit: 'contain',
+                objectPosition: 'center center',
               }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           </div>
         ) : (
           <div className="h-56 sm:h-72 w-full bg-gradient-to-r from-slate-950 via-indigo-700 to-violet-500" />
