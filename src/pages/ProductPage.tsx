@@ -242,12 +242,19 @@ export function ProductPage() {
       >
         {/* Banner */}
         {product.banner_image_url ? (
-          <div className="relative h-56 sm:h-72 w-full overflow-hidden rounded-t-3xl">
+          <div className="relative w-full overflow-hidden rounded-t-3xl" style={{ height: 288 }}>
             <img
               src={product.banner_image_url}
               alt={product.name}
               loading="lazy"
-              className="absolute inset-0 w-full h-full object-cover"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: '50% 50%',
+              }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           </div>
@@ -259,12 +266,12 @@ export function ProductPage() {
           <div className="flex flex-col sm:flex-row gap-6">
             {/* Logo */}
             <div className="flex-shrink-0 -mt-16 sm:-mt-20">
-              <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-white dark:bg-zinc-900 p-2 shadow-lg">
+              <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-white dark:bg-zinc-900 p-2 shadow-lg flex items-center justify-center">
                 {product.logo_url ? (
                   <img
                     src={product.logo_url}
                     alt={product.name}
-                    className="w-full h-full object-cover rounded-xl"
+                    className="w-full h-full object-contain rounded-xl"
                   />
                 ) : (
                   <div className="w-full h-full bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center">
