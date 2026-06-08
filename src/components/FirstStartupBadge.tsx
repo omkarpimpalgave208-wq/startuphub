@@ -77,12 +77,12 @@ export function FirstStartupBadge({ startupName, founderName, earnedDate, imageU
         <img 
           src={testImageUrl} 
           alt="First Startup Badge" 
-          className="w-full aspect-[301/221] rounded-xl shadow-[0_10px_40px_rgba(245,158,11,0.15)] object-contain bg-black"
+          className="w-full aspect-video rounded-xl shadow-[0_10px_40px_rgba(245,158,11,0.15)] object-contain bg-[#050505]"
         />
       ) : (
         <div 
           ref={badgeRef} 
-          className="relative w-full aspect-[4/5] rounded-xl overflow-hidden shadow-[0_10px_40px_rgba(245,158,11,0.15)] font-sans bg-black"
+          className="relative w-full aspect-video rounded-xl overflow-hidden shadow-[0_10px_40px_rgba(245,158,11,0.15)] font-sans bg-[#050505]"
         >
           {/* Approved Badge Image Template */}
           <img 
@@ -97,11 +97,11 @@ export function FirstStartupBadge({ startupName, founderName, earnedDate, imageU
             <div className="w-full text-center px-6 space-y-4">
               <div>
                 <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Startup</p>
-                <p className="text-xl text-white font-black truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{startupName}</p>
+                <p className="text-xl text-white font-black line-clamp-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{startupName}</p>
               </div>
               <div>
                 <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Founder</p>
-                <p className="text-base text-zinc-200 font-bold truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{founderName}</p>
+                <p className="text-base text-zinc-200 font-bold line-clamp-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{founderName}</p>
               </div>
               
               {/* Decorative Divider */}
