@@ -93,7 +93,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -3 }}
-      className="group w-full h-[340px]"
+      className="group w-full h-full"
     >
       <Link to={`/product/${product.id}`} className="block w-full h-full">
         <div className={`
@@ -182,45 +182,45 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                   ))}
                 </div>
               </div>
-
-              {/* Card Footer */}
-              <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
-                {product.profiles && (
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Avatar
-                      src={product.profiles.avatar_url}
-                      alt={founderName}
-                      size="md"
-                      className="lg:w-12 lg:h-12 lg:min-w-[48px] lg:min-h-[48px]"
-                    />
-                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">
-                      {founderName}
-                    </span>
-                  </div>
-                )}
-
-                <Badge variant="outline" className="text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-zinc-50/50 dark:bg-zinc-950/20 py-0.5 px-2 border-zinc-200/60 dark:border-zinc-800 text-zinc-500">
-                  {product.category}
-                </Badge>
-
-                <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500 text-xs font-bold ml-auto flex-shrink-0">
-                  <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span>{product.comments?.[0]?.count || 0}</span>
-                </div>
-
-                {product.website_url && (
-                  <a
-                    href={product.website_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center justify-center w-7 h-7 rounded-lg border border-zinc-200/50 dark:border-zinc-800 hover:border-orange-500 text-zinc-400 hover:text-orange-500 transition-colors flex-shrink-0 cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
-              </div>
             </div>
+          </div>
+
+          {/* Card Footer */}
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
+            {product.profiles && (
+              <div className="flex items-center gap-2 min-w-0">
+                <Avatar
+                  src={product.profiles.avatar_url}
+                  alt={founderName}
+                  size="md"
+                  className="lg:w-12 lg:h-12 lg:min-w-[48px] lg:min-h-[48px]"
+                />
+                <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">
+                  {founderName}
+                </span>
+              </div>
+            )}
+
+            <Badge variant="outline" className="text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-zinc-50/50 dark:bg-zinc-950/20 py-0.5 px-2 border-zinc-200/60 dark:border-zinc-800 text-zinc-500">
+              {product.category}
+            </Badge>
+
+            <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500 text-xs font-bold ml-auto flex-shrink-0">
+              <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>{product.comments?.[0]?.count || 0}</span>
+            </div>
+
+            {product.website_url && (
+              <a
+                href={product.website_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center justify-center w-7 h-7 rounded-lg border border-zinc-200/50 dark:border-zinc-800 hover:border-orange-500 text-zinc-400 hover:text-orange-500 transition-colors flex-shrink-0 cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
         </div>
       </Link>
