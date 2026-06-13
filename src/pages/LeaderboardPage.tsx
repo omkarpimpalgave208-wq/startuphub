@@ -20,11 +20,18 @@ import {
   Sparkles,
   Swords,
   Activity,
+  ChevronDown,
+  ChevronUp,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { Avatar } from '../components/ui/Avatar';
 import { StartupBattle } from '../components/StartupBattle';
+import { TournamentBracket } from '../components/TournamentBracket';
+import { BoostAuctionWidget } from '../components/BoostAuctionWidget';
+import { LeaderboardInsights } from '../components/LeaderboardInsights';
+import { useAuthStore } from '../store/authStore';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -65,7 +72,8 @@ type TabId =
   | 'mobile'
   | 'web3'
   | 'student'
-  | 'battle';
+  | 'battle'
+  | 'tournament';
 
 interface ActivityEvent {
   id: string;
@@ -89,6 +97,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'web3', label: 'Web3', icon: TrendingUp },
   { id: 'student', label: 'Student Startups', icon: Medal },
   { id: 'battle', label: '⚔️ Battle Mode', icon: Swords },
+  { id: 'tournament', label: '🏆 Tournament', icon: Trophy },
 ];
 
 const BADGE_CONFIG: Record<BadgeId, { label: string; color: string; icon: React.ElementType }> = {
@@ -145,7 +154,7 @@ function assignBadges(entry: Omit<LeaderboardEntry, 'badges'>, rank: number, cre
 
 function getUTCSeasonWeekStart(): Date {
   const now = new Date();
-  const utcDay = now.getUTCDay(); // 0 is Sunday, 1 is Monday...
+  const utcDay = now.getUTCDay();
   const utcDate = now.getUTCDate();
   const seasonStart = new Date(Date.UTC(
     now.getUTCFullYear(),
@@ -165,6 +174,29 @@ function getUTCSeasonMonthStart(): Date {
     0, 0, 0, 0
   ));
   return seasonStart;
+}
+
+// ─── Gamified Levels Helper ─────────────────────────────────────────────────
+
+function getFounderLevel(entry: { upvote_count: number; comment_count: number; follower_count: number; rank: number }) {
+  const upvoteXP = (entry.upvote_count || 0) * 10;
+  const commentXP = (entry.comment_count || 0) * 20;
+  const followerXP = (entry.follower_count || 0) * 15;
+  
+  let rankBonus = 0;
+  if (entry.rank === 1) rankBonus = 500;
+  else if (entry.rank <= 10) rankBonus = 200;
+  else if (entry.rank <= 50) rankBonus = 100;
+  
+  const xp = upvoteXP + commentXP + followerXP + rankBonus;
+  const level = Math.floor(xp / 100) + 1;
+  
+  let title = 'Founder';
+  if (level >= 50) title = 'Unicorn';
+  else if (level >= 25) title = 'Growth Hacker';
+  else if (level >= 10) title = 'Builder';
+  
+  return { xp, level, title };
 }
 
 // ─── Rank Medal ─────────────────────────────────────────────────────────────
@@ -256,8 +288,11 @@ export function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   
-  // Real-Time Activity Feed state
+  // Real-Time Bidding & expanded row states
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  const [activeBoost, setActiveBoost] = useState<any | null>(null);
+  const [biddingLoading, setBiddingLoading] = useState(false);
 
   // Refs for tracking changes and lookup caching
   const nameCacheRef = useRef<Record<string, string>>({});
@@ -294,6 +329,46 @@ export function LeaderboardPage() {
     return type === 'product' ? 'a startup' : 'Someone';
   }, []);
 
+  // Fetch active boost slots from Discussions
+  const fetchActiveBoost = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('discussions')
+        .select('id, user_id, title, content, created_at')
+        .eq('category', 'BoostBid');
+
+      if (error) throw error;
+      
+      let highestBid = 0;
+      let active: any = null;
+      const now = Date.now();
+      
+      if (data) {
+        for (const item of data) {
+          try {
+            const payload = JSON.parse(item.content);
+            if (payload.expiresAt > now && payload.bidAmount > highestBid) {
+              highestBid = payload.bidAmount;
+              active = {
+                productId: payload.productId,
+                productName: '', 
+                logoUrl: null,   
+                bidAmount: payload.bidAmount,
+                expiresAt: payload.expiresAt,
+                user_id: item.user_id,
+              };
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+      setActiveBoost(active);
+    } catch (err) {
+      console.error('Error fetching active boost:', err);
+    }
+  }, []);
+
   const fetchLeaderboard = useCallback(async (tab: TabId) => {
     setLoading(true);
     try {
@@ -304,6 +379,9 @@ export function LeaderboardPage() {
       // UTC-based Seasonal start dates
       const seasonWeekStart = getUTCSeasonWeekStart().getTime();
       const seasonMonthStart = getUTCSeasonMonthStart().getTime();
+
+      // Fetch active boost bids in parallel
+      await fetchActiveBoost();
 
       // Build the base query — fetch detailed comments, upvotes, and follows for computing weighted score and weekly stats
       let query = supabase
@@ -425,7 +503,7 @@ export function LeaderboardPage() {
       });
 
       // Map rows with current, historical, and weekly scores
-      const mapped = rows.map((r: any, idx: number) => {
+      const mapped = rows.map((r: any) => {
         const upvotesList = r.upvotes || [];
         const commentsList = r.comments || [];
         const followersList = r.profiles?.followers || [];
@@ -441,9 +519,10 @@ export function LeaderboardPage() {
           nameCacheRef.current[r.profiles.id] = r.profiles.full_name || r.profiles.username || 'Founder';
         }
 
-        // Boost multiplier check (calculated logic: r.boost_active OR 4th overall item as visual demo)
-        const isBoosted = r.boost_active === true || (tab === 'overall' && idx === 3);
-        const boostMultiplier = isBoosted ? 1.15 : 1;
+        // Active Boost multiplier logic (derived from Supabase Discussions BoostBid)
+        const isBoosted = activeBoost && activeBoost.productId === r.id;
+        // Bid-based boost factor from 1.2x to 1.5x
+        const boostMultiplier = isBoosted ? (1.2 + Math.min(0.3, (activeBoost?.bidAmount || 0) / 10000)) : 1;
 
         // Current weighted counts
         const currentUpvotes = getWeightedCount(upvotesList);
@@ -460,8 +539,7 @@ export function LeaderboardPage() {
         const weeklyComments = getWeightedCount(commentsList, sevenDaysAgo);
         const weeklyFollowers = getWeightedCount(followersList, sevenDaysAgo);
 
-        // Score formula: (upvotes * 5) + (comments * 2) + (followers * 3) + (profile_views * 0.1)
-        // Scoped to either current activity, or weekly/seasonal activity
+        // Score calculations
         let score = 0;
         let scoreHist = 0;
         let displayUpvotes = rawUpvotes;
@@ -648,7 +726,7 @@ export function LeaderboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchActiveBoost]);
 
   // Debounce score recalculation to batch multiple updates and prevent heavy load
   const triggerDebouncedFetch = useCallback(() => {
@@ -660,7 +738,61 @@ export function LeaderboardPage() {
     }, 400);
   }, [fetchLeaderboard]);
 
-  const handleRealtimeEvent = useCallback((type: 'upvote' | 'comment' | 'follow' | 'product', payload: any) => {
+  // Handle placing a boost bid on Supabase
+  const handleBidPlacement = useCallback(async (amount: number) => {
+    const { user } = useAuthStore.getState();
+    if (!user) throw new Error('You must be signed in!');
+    
+    // Find user's startup in entries
+    const myStartup = entries.find(e => e.user_id === user.id);
+    if (!myStartup) throw new Error('No launched startup found for your profile!');
+
+    setBiddingLoading(true);
+    try {
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24h boost
+      const { error } = await supabase
+        .from('discussions')
+        .insert({
+          user_id: user.id,
+          title: `[BOOST_BID] ${myStartup.id}`,
+          content: JSON.stringify({
+            productId: myStartup.id,
+            bidAmount: amount,
+            expiresAt,
+          }),
+          category: 'BoostBid',
+        });
+
+      if (error) throw error;
+      
+      // Update local state instantly and refetch
+      setActiveBoost({
+        productId: myStartup.id,
+        bidAmount: amount,
+        expiresAt,
+        user_id: user.id,
+      });
+      
+      setActivityEvents(prev => [
+        {
+          id: `boost-${Date.now()}`,
+          text: `⚡ ${myStartup.name} placed a bid of ${amount} XP for the Boost slot!`,
+          timestamp: new Date(),
+          type: 'rank_shift'
+        },
+        ...prev
+      ].slice(0, 20));
+
+      triggerDebouncedFetch();
+    } catch (err: any) {
+      console.error('Bid error:', err);
+      throw err;
+    } finally {
+      setBiddingLoading(false);
+    }
+  }, [entries, triggerDebouncedFetch]);
+
+  const handleRealtimeEvent = useCallback((type: 'upvote' | 'comment' | 'follow' | 'product' | 'discussion', payload: any) => {
     // 1. Post event to activity feed
     void (async () => {
       try {
@@ -690,6 +822,12 @@ export function LeaderboardPage() {
             const name = payload.new.name;
             text = `${name} just launched! 🚀`;
             nameCacheRef.current[payload.new.id] = name;
+          } else if (type === 'discussion' && payload.new.category === 'BoostBid') {
+            const bidder = await getName(payload.new.user_id, 'profile');
+            const data = JSON.parse(payload.new.content);
+            const prodName = await getName(data.productId, 'product');
+            text = `⚡ ${bidder} bid ${data.bidAmount} XP to boost ${prodName}!`;
+            void fetchActiveBoost();
           }
 
           if (text) {
@@ -698,7 +836,7 @@ export function LeaderboardPage() {
                 id: `${type}-${Date.now()}-${Math.random()}`,
                 text,
                 timestamp: new Date(),
-                type: type === 'product' ? 'new_startup' : type
+                type: type === 'product' ? 'new_startup' : type === 'discussion' ? 'rank_shift' : type
               },
               ...prev
             ].slice(0, 20));
@@ -754,14 +892,14 @@ export function LeaderboardPage() {
             return entry;
           }));
         }
-      } else if (type === 'product') {
+      } else if (type === 'product' || type === 'discussion') {
         triggerDebouncedFetch();
       }
     } else {
       // Standard tabs: debounced recalculation
       triggerDebouncedFetch();
     }
-  }, [getName, triggerDebouncedFetch]);
+  }, [getName, fetchActiveBoost, triggerDebouncedFetch]);
 
   // Pre-populate historical activities on load
   const fetchRecentActivities = useCallback(async () => {
@@ -883,6 +1021,13 @@ export function LeaderboardPage() {
           handleRealtimeEvent('product', payload);
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'discussions' },
+        (payload) => {
+          handleRealtimeEvent('discussion', payload);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -897,8 +1042,95 @@ export function LeaderboardPage() {
   const top3 = useMemo(() => entries.slice(0, 3), [entries]);
   const rest = useMemo(() => entries.slice(3), [entries]);
 
-  // 🔥 Rising Stars Section Logic
-  // Filter startups with rank improvement in last 24h, and at least 5 upvotes OR 3 comments.
+  // Resolved active boost detailed mapping
+  const resolvedActiveBoost = useMemo(() => {
+    if (!activeBoost) return null;
+    const match = entries.find(e => e.id === activeBoost.productId);
+    return {
+      ...activeBoost,
+      productName: match ? match.name : 'a startup',
+      logoUrl: match ? match.logo_url : null,
+    };
+  }, [activeBoost, entries]);
+
+  // Logged-in user startup XP helper
+  const userStartup = useMemo(() => {
+    const { user } = useAuthStore();
+    if (!user) return null;
+    const match = entries.find(e => e.user_id === user.id);
+    if (!match) return null;
+    
+    // Derive raw XP
+    const { xp } = getFounderLevel(match);
+
+    return {
+      id: match.id,
+      name: match.name,
+      logoUrl: match.logo_url,
+      xp,
+    };
+  }, [entries]);
+
+  // Dynamically compute competitive alerts
+  const competitiveAlerts = useMemo(() => {
+    const alerts: string[] = [];
+    const { user } = useAuthStore.getState();
+    const myStartup = user ? entries.find(e => e.user_id === user.id) : null;
+
+    if (myStartup) {
+      // 1. Positions shifted alert
+      const change = (myStartup.prev_rank || myStartup.rank) - myStartup.rank;
+      if (Math.abs(change) >= 2) {
+        if (change > 0) {
+          alerts.push(`🔥 Competitive Alert: Your startup '${myStartup.name}' jumped +${change} positions today! Keep it up! 🚀`);
+        } else {
+          alerts.push(`⚠️ Rank Warning: Your startup '${myStartup.name}' dropped -${Math.abs(change)} positions. Drive more comments to reclaim your rank!`);
+        }
+      }
+
+      // 2. Proximity to Top 10 alert
+      if (myStartup.rank > 10 && myStartup.rank <= 13) {
+        alerts.push(`🏆 Race to Top 10: Your startup '${myStartup.name}' is ranked #${myStartup.rank}, only ${myStartup.rank - 10} positions away from the Top 10!`);
+      }
+
+      // 3. Overtaken alert
+      entries.forEach(other => {
+        if (other.id !== myStartup.id && other.prev_rank !== undefined && myStartup.prev_rank !== undefined) {
+          if (other.prev_rank > myStartup.prev_rank && other.rank < myStartup.rank) {
+            alerts.push(`⚔️ Competitive Alert: '${other.name}' just overtook '${myStartup.name}' for Rank #${other.rank}! Get some upvotes to overtake them!`);
+          }
+        }
+      });
+    }
+
+    // Default/fallback alerts calculated from top entries to ensure feed is filled
+    if (entries.length > 3) {
+      entries.slice(0, 10).forEach(startup => {
+        const change = (startup.prev_rank || startup.rank) - startup.rank;
+        if (change >= 3) {
+          alerts.push(`📈 Trending: '${startup.name}' has accelerated, climbing +${change} spots on the leaderboard!`);
+        }
+      });
+
+      const nearTop10 = entries.find(e => e.rank === 11 || e.rank === 12);
+      if (nearTop10) {
+        alerts.push(`🔥 Top 10 Race: '${nearTop10.name}' is ranked #${nearTop10.rank}, just ${nearTop10.rank - 10} position away from entering the Top 10!`);
+      }
+
+      for (let i = 0; i < Math.min(10, entries.length - 1); i++) {
+        const sA = entries[i];
+        const sB = entries[i + 1];
+        if (sA.prev_rank !== undefined && sB.prev_rank !== undefined && sA.prev_rank > sB.prev_rank) {
+          alerts.push(`⚔️ Rivalry: '${sA.name}' just overtook '${sB.name}' for Rank #${sA.rank}!`);
+          break;
+        }
+      }
+    }
+
+    return alerts.slice(0, 5); 
+  }, [entries]);
+
+  // Rising Stars Section Logic
   const risingStars = useMemo(() => {
     return entries
       .map((entry) => {
@@ -912,6 +1144,11 @@ export function LeaderboardPage() {
   }, [entries]);
 
   const isSeasonalTab = activeTab === 'season_week' || activeTab === 'season_month';
+
+  const handleSelectBracketMatch = (idA: string, idB: string) => {
+    setActiveTab('battle');
+    // Scroll or set values if needed, the battle component handles active ids
+  };
 
   return (
     <div className="w-full max-w-none min-w-0 pb-16 space-y-8">
@@ -951,6 +1188,9 @@ export function LeaderboardPage() {
         </div>
       </div>
 
+      {/* ── Competitive Alerts Center ────────────────────────────── */}
+      <CompetitiveAlertsTray alerts={competitiveAlerts} />
+
       {/* ── Tabs ─────────────────────────────────────────────────── */}
       <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap">
         {TABS.map((tab) => {
@@ -976,7 +1216,7 @@ export function LeaderboardPage() {
       {/* ── 2-Column Responsive Layout ───────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
         
-        {/* Left column: Leaderboard content or Battle Arena */}
+        {/* Left column: Leaderboard content, Battle Arena, or Tournament Bracket */}
         <div className="lg:col-span-3 space-y-6">
           <AnimatePresence mode="wait">
             <motion.div
@@ -986,7 +1226,9 @@ export function LeaderboardPage() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.15 }}
             >
-              {activeTab === 'battle' ? (
+              {activeTab === 'tournament' ? (
+                <TournamentBracket startups={entries} onSelectMatch={handleSelectBracketMatch} />
+              ) : activeTab === 'battle' ? (
                 <StartupBattle startups={entries} />
               ) : loading ? (
                 <div className="space-y-3">
@@ -1018,13 +1260,10 @@ export function LeaderboardPage() {
                   {/* ── Podium (Top 3) ──── */}
                   {top3.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {/* 2nd place */}
                       {top3[1] && (
                         <PodiumCard entry={top3[1]} podiumPos={2} isSeasonal={isSeasonalTab} />
                       )}
-                      {/* 1st place — center and elevated */}
                       <PodiumCard entry={top3[0]} podiumPos={1} isSeasonal={isSeasonalTab} />
-                      {/* 3rd place */}
                       {top3[2] && (
                         <PodiumCard entry={top3[2]} podiumPos={3} isSeasonal={isSeasonalTab} />
                       )}
@@ -1101,7 +1340,28 @@ export function LeaderboardPage() {
                       {/* Rows */}
                       <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                         {rest.map((entry) => (
-                          <LeaderboardRow key={entry.id} entry={entry} isSeasonal={isSeasonalTab} />
+                          <div key={entry.id} className="flex flex-col w-full">
+                            <LeaderboardRow
+                              entry={entry}
+                              isSeasonal={isSeasonalTab}
+                              isExpanded={expandedEntryId === entry.id}
+                              onToggleExpand={() => setExpandedEntryId(prev => prev === entry.id ? null : entry.id)}
+                            />
+                            {/* Lazy-loaded / Collapsible Insights drawer */}
+                            <AnimatePresence>
+                              {expandedEntryId === entry.id && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                  className="px-5 pb-5 bg-zinc-50/40 dark:bg-zinc-950/20 border-t border-zinc-100 dark:border-zinc-800/60 overflow-hidden"
+                                >
+                                  <LeaderboardInsights entry={entry} allEntries={entries} />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -1112,11 +1372,53 @@ export function LeaderboardPage() {
           </AnimatePresence>
         </div>
 
-        {/* Right column: Sticky Activity Feed Sidebar Widget */}
-        <div className="lg:col-span-1 lg:sticky lg:top-24">
+        {/* Right column: Sticky Sidebars (Boost Auction Widget + Live Feed) */}
+        <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-24">
+          <BoostAuctionWidget
+            currentBoost={resolvedActiveBoost}
+            userStartup={userStartup}
+            onBid={handleBidPlacement}
+            loading={biddingLoading}
+          />
           <ActivityFeedWidget events={activityEvents} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Pinned Competitive Alerts Tray ────────────────────────────────────────
+
+function CompetitiveAlertsTray({ alerts }: { alerts: string[] }) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+
+  useEffect(() => {
+    if (alerts.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % alerts.length);
+    }, 6000); // cycle alerts every 6s
+    return () => clearInterval(interval);
+  }, [alerts]);
+
+  if (alerts.length === 0) return null;
+
+  return (
+    <div className="bg-gradient-to-r from-orange-500/10 via-red-500/5 to-transparent border border-orange-500/20 rounded-2xl p-3 flex items-center gap-3">
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 border border-orange-500/20 text-[9px] font-black uppercase tracking-wider animate-pulse flex-shrink-0">
+        Rivalry Alert
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.p
+          key={currentIdx}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.25 }}
+          className="text-xs font-bold text-zinc-800 dark:text-zinc-200 line-clamp-1 leading-normal"
+        >
+          {alerts[currentIdx]}
+        </motion.p>
+      </AnimatePresence>
     </div>
   );
 }
@@ -1125,6 +1427,8 @@ export function LeaderboardPage() {
 
 function PodiumCard({ entry, podiumPos, isSeasonal }: { entry: LeaderboardEntry; podiumPos: 1 | 2 | 3; isSeasonal?: boolean }) {
   const isFirst = podiumPos === 1;
+  const { level } = getFounderLevel(entry);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -1134,6 +1438,10 @@ function PodiumCard({ entry, podiumPos, isSeasonal }: { entry: LeaderboardEntry;
         isFirst
           ? 'bg-gradient-to-b from-amber-50 to-white dark:from-amber-950/20 dark:to-zinc-900 border-amber-300 dark:border-amber-700 shadow-lg shadow-amber-500/10 sm:-mt-4'
           : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800'
+      } ${
+        entry.isBoosted
+          ? 'ring-2 ring-amber-500 shadow-lg shadow-amber-500/10 border-amber-400'
+          : ''
       }`}
     >
       {isFirst && (
@@ -1165,7 +1473,10 @@ function PodiumCard({ entry, podiumPos, isSeasonal }: { entry: LeaderboardEntry;
           className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
         >
           <Avatar src={entry.founder_avatar} alt={entry.founder_name ?? ''} size="xs" />
-          <span className="truncate max-w-[100px]">{entry.founder_name}</span>
+          <span className="truncate max-w-[80px]">{entry.founder_name}</span>
+          <span className="inline-flex px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 text-[8px] font-extrabold border border-indigo-500/20">
+            Lv.{level}
+          </span>
         </Link>
       )}
 
@@ -1193,8 +1504,16 @@ function PodiumCard({ entry, podiumPos, isSeasonal }: { entry: LeaderboardEntry;
 
 // ─── Leaderboard Table Row ───────────────────────────────────────────────────
 
-function LeaderboardRow({ entry, isSeasonal }: { entry: LeaderboardEntry; isSeasonal?: boolean }) {
+interface LeaderboardRowProps {
+  entry: LeaderboardEntry;
+  isSeasonal?: boolean;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+}
+
+function LeaderboardRow({ entry, isSeasonal, isExpanded, onToggleExpand }: LeaderboardRowProps) {
   const rankImproved = entry.prev_rank !== undefined && entry.rank < entry.prev_rank;
+  const { level } = getFounderLevel(entry);
 
   return (
     <motion.div
@@ -1211,18 +1530,18 @@ function LeaderboardRow({ entry, isSeasonal }: { entry: LeaderboardEntry; isSeas
       }}
       className={`grid grid-cols-[2rem_1fr_auto] sm:grid-cols-[2.5rem_1fr_6rem_6rem_6rem_6rem_7rem] gap-3 px-5 py-4 items-center hover:bg-zinc-50/60 dark:hover:bg-zinc-800/20 transition-all ${
         entry.isBoosted 
-          ? 'border-l-4 border-l-orange-500 bg-orange-500/5 dark:bg-orange-500/5 ring-1 ring-orange-500/10 shadow-md shadow-orange-500/5' 
+          ? 'border-l-4 border-l-amber-500 bg-amber-500/5 dark:bg-amber-500/5 ring-1 ring-amber-500/10 shadow-md shadow-amber-500/5' 
           : ''
       }`}
     >
       {/* Rank */}
-      <div className="flex justify-center">
+      <div className="flex justify-center" onClick={onToggleExpand}>
         <RankMedal rank={entry.rank} />
       </div>
 
       {/* Startup info */}
-      <div className="flex items-center gap-3 min-w-0">
-        <Link to={`/product/${entry.id}`} className="flex-shrink-0">
+      <div className="flex items-center gap-3 min-w-0" onClick={onToggleExpand}>
+        <Link to={`/product/${entry.id}`} className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <div className="w-10 h-10 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 hover:ring-2 hover:ring-orange-500/30 transition-all">
             {entry.logo_url ? (
               <img src={entry.logo_url} alt={entry.name} className="w-full h-full object-cover" />
@@ -1233,60 +1552,67 @@ function LeaderboardRow({ entry, isSeasonal }: { entry: LeaderboardEntry; isSeas
             )}
           </div>
         </Link>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 cursor-pointer">
           <div className="flex items-center gap-2 flex-wrap">
-            <Link
-              to={`/product/${entry.id}`}
-              className="font-bold text-sm text-zinc-900 dark:text-white hover:text-orange-500 transition-colors truncate"
-            >
+            <span className="font-bold text-sm text-zinc-900 dark:text-white hover:text-orange-500 transition-colors truncate">
               {entry.name}
-            </Link>
+            </span>
             <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] font-bold text-zinc-500 capitalize hidden sm:inline-block">
               {entry.category}
             </span>
             {entry.isBoosted && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-500/10 text-[10px] font-extrabold text-orange-500 border border-orange-500/20 animate-pulse">
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-[10px] font-extrabold text-amber-500 border border-amber-500/20 animate-pulse">
                 ⚡ Boosted
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             {entry.founder_username && (
               <Link
                 to={`/profile/${entry.founder_username}`}
                 className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                onClick={(e) => e.stopPropagation()}
               >
                 <Avatar src={entry.founder_avatar} alt={entry.founder_name ?? ''} size="xs" />
-                <span className="truncate max-w-[120px]">{entry.founder_name}</span>
+                <span className="truncate max-w-[100px]">{entry.founder_name}</span>
               </Link>
             )}
+            <span className="inline-flex px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 text-[8px] font-extrabold border border-indigo-500/20">
+              Lv.{level}
+            </span>
             <BadgeChips badges={entry.badges.slice(0, 1)} isSeasonal={isSeasonal} />
           </div>
         </div>
       </div>
 
       {/* Stats — hidden on mobile */}
-      <div className="hidden sm:flex justify-center items-center gap-1 text-sm font-bold text-zinc-700 dark:text-zinc-300">
+      <div className="hidden sm:flex justify-center items-center gap-1 text-sm font-bold text-zinc-700 dark:text-zinc-300" onClick={onToggleExpand}>
         <ThumbsUp className="w-3.5 h-3.5 text-orange-400" />
         {entry.upvote_count}
       </div>
-      <div className="hidden sm:flex justify-center items-center gap-1 text-sm font-bold text-zinc-700 dark:text-zinc-300">
+      <div className="hidden sm:flex justify-center items-center gap-1 text-sm font-bold text-zinc-700 dark:text-zinc-300" onClick={onToggleExpand}>
         <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
         {entry.comment_count}
       </div>
-      <div className="hidden sm:flex justify-center items-center gap-1 text-sm font-bold text-zinc-700 dark:text-zinc-300">
+      <div className="hidden sm:flex justify-center items-center gap-1 text-sm font-bold text-zinc-700 dark:text-zinc-300" onClick={onToggleExpand}>
         <Users className="w-3.5 h-3.5 text-emerald-400" />
         {entry.follower_count}
       </div>
 
       {/* Score */}
-      <div className="hidden sm:flex justify-end">
+      <div className="hidden sm:flex justify-end" onClick={onToggleExpand}>
         <span className="text-sm font-black text-orange-500">{entry.score}</span>
       </div>
 
-      {/* Movement */}
-      <div className="flex justify-end">
+      {/* Movement & Expand button */}
+      <div className="flex justify-end items-center gap-2">
         <MovementIndicator current={entry.rank} prev={entry.prev_rank} />
+        <button
+          onClick={onToggleExpand}
+          className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors text-zinc-400 hover:text-zinc-650"
+        >
+          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
       </div>
     </motion.div>
   );
@@ -1298,7 +1624,7 @@ function ActivityFeedWidget({ events }: { events: ActivityEvent[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col h-[580px] lg:h-[650px] w-full">
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col h-[500px] w-full">
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-rose-500 to-indigo-500" />
       
       <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">

@@ -261,6 +261,8 @@ export const api = {
       // Capitalize first letter to match discussion categories
       const formattedCategory = category.charAt(0).toUpperCase() + category.slice(1);
       query = query.eq('category', formattedCategory);
+    } else {
+      query = query.neq('category', 'BoostBid');
     }
 
     if (trending) {
