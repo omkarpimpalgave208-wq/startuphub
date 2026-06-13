@@ -185,10 +185,6 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
 
               {/* Card Footer */}
               <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
-                <Badge variant="outline" className="text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-zinc-50/50 dark:bg-zinc-950/20 py-0.5 px-2 border-zinc-200/60 dark:border-zinc-800 text-zinc-500">
-                  {product.category}
-                </Badge>
-
                 {product.profiles && (
                   <div className="flex items-center gap-2 min-w-0">
                     <Avatar
@@ -202,6 +198,10 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                     </span>
                   </div>
                 )}
+
+                <Badge variant="outline" className="text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-zinc-50/50 dark:bg-zinc-950/20 py-0.5 px-2 border-zinc-200/60 dark:border-zinc-800 text-zinc-500">
+                  {product.category}
+                </Badge>
 
                 <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500 text-xs font-bold ml-auto flex-shrink-0">
                   <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
