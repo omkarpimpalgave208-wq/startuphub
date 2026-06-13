@@ -191,7 +191,8 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
                     <Avatar
                       src={product.profiles.avatar_url}
                       alt={founderName}
-                      size="xs"
+                      size="md"
+                      className="lg:w-12 lg:h-12 lg:min-w-[48px] lg:min-h-[48px]"
                     />
                     <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">
                       {founderName}
