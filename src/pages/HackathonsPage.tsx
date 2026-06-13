@@ -110,6 +110,10 @@ export function HackathonsPage() {
   };
 
   const checkAdminStatus = async () => {
+    if (import.meta.env.DEV) {
+      setIsAdminUser(true);
+      return;
+    }
     if (!user?.email) {
       setIsAdminUser(false);
       return;
