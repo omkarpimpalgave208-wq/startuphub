@@ -93,7 +93,7 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -3 }}
-      className="group w-full h-full"
+      className="group w-full h-[340px]"
     >
       <Link to={`/product/${product.id}`} className="block w-full h-full">
         <div className={`
