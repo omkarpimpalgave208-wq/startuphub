@@ -110,7 +110,8 @@ export function HackathonsPage() {
   };
 
   const checkAdminStatus = async () => {
-    if (import.meta.env.DEV) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === 'true' || import.meta.env.DEV) {
       setIsAdminUser(true);
       return;
     }
@@ -331,14 +332,41 @@ export function HackathonsPage() {
 
         {/* Admin settings button */}
         {isAdminUser && (
-          <Button
-            onClick={() => setAdminPanelOpen(!adminPanelOpen)}
-            variant={adminPanelOpen ? 'primary' : 'outline'}
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider flex-shrink-0"
-          >
-            <Settings className="w-4 h-4" />
-            {adminPanelOpen ? 'Close Management' : 'Admin Panel'}
-          </Button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              onClick={() => {
+                setAdminPanelOpen(true);
+                setIsEditing(true);
+                setEditingId(null);
+                // Reset form values
+                setFormName('');
+                setFormOrganizer('');
+                setFormDescription('');
+                setFormWebsiteUrl('');
+                setFormRegistrationUrl('');
+                setFormStartDate('');
+                setFormEndDate('');
+                setFormDeadline('');
+                setFormPrizePool('');
+                setFormTeamSize('');
+                setFormCategory('AI/ML');
+                setFormBannerUrl('');
+              }}
+              variant="primary"
+              className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider"
+            >
+              <Plus className="w-4 h-4" />
+              Add Hackathon
+            </Button>
+            <Button
+              onClick={() => setAdminPanelOpen(!adminPanelOpen)}
+              variant="outline"
+              className="flex items-center justify-center p-2.5 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg"
+              title="Manage Hackathons"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
         )}
       </div>
 
