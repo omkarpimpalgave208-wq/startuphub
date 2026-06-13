@@ -93,21 +93,22 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -3 }}
-      className="group w-full"
+      className="group w-full h-full"
     >
-      <Link to={`/product/${product.id}`} className="block w-full">
+      <Link to={`/product/${product.id}`} className="block w-full h-full">
         <div className={`
-          w-full bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80
+          w-full h-full bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80
           hover:border-orange-500/30 dark:hover:border-orange-500/30
           shadow-sm hover:shadow-xl dark:shadow-none hover:shadow-orange-500/5
           transition-all duration-200
+          flex flex-col
           ${featured ? 'p-6 sm:p-8' : 'p-5 sm:p-6'}
         `}>
-          <div className="flex gap-4 sm:gap-5 w-full min-w-0 items-start">
+          <div className="flex gap-4 sm:gap-5 w-full min-w-0 items-stretch flex-1">
             
             {/* Logo */}
             <div className={`
-              flex-shrink-0 rounded-2xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center border border-zinc-200/40 dark:border-zinc-800
+              flex-shrink-0 self-start rounded-2xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center border border-zinc-200/40 dark:border-zinc-800
               ${featured ? 'w-16 h-16 sm:w-20 sm:h-20' : 'w-12 h-12 sm:w-16 sm:h-16'}
             `}>
               {product.logo_url ? (
@@ -124,60 +125,62 @@ export function ProductCard({ product, featured = false }: ProductCardProps) {
             </div>
 
             {/* Content Info */}
-            <div className="flex-1 min-w-0 overflow-hidden">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className={`
-                      font-bold text-zinc-900 dark:text-white truncate group-hover:text-orange-500 transition-colors
-                      ${featured ? 'text-lg sm:text-2xl' : 'text-base sm:text-lg'}
-                    `}>
-                      {product.name}
-                    </h3>
+            <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
+              <div className="flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className={`
+                        font-bold text-zinc-900 dark:text-white truncate group-hover:text-orange-500 transition-colors
+                        ${featured ? 'text-lg sm:text-2xl' : 'text-base sm:text-lg'}
+                      `}>
+                        {product.name}
+                      </h3>
+                      
+                      {/* Stage Badge */}
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase ${
+                        stage === 'Idea' ? 'bg-orange-500/10 text-orange-500' :
+                        stage === 'MVP' ? 'bg-blue-500/10 text-blue-500' :
+                        stage === 'Beta' ? 'bg-purple-500/10 text-purple-500' :
+                        'bg-emerald-500/10 text-emerald-500'
+                      }`}>
+                        {stage}
+                      </span>
+                    </div>
                     
-                    {/* Stage Badge */}
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase ${
-                      stage === 'Idea' ? 'bg-orange-500/10 text-orange-500' :
-                      stage === 'MVP' ? 'bg-blue-500/10 text-blue-500' :
-                      stage === 'Beta' ? 'bg-purple-500/10 text-purple-500' :
-                      'bg-emerald-500/10 text-emerald-500'
-                    }`}>
-                      {stage}
-                    </span>
+                    <p className={`
+                      text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed
+                      ${featured ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'}
+                    `}>
+                      {product.tagline}
+                    </p>
                   </div>
-                  
-                  <p className={`
-                    text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed
-                    ${featured ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'}
-                  `}>
-                    {product.tagline}
-                  </p>
+
+                  {/* Snappy upvote button */}
+                  <button
+                    onClick={handleUpvote}
+                    className={`
+                      flex-shrink-0 flex flex-col items-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2.5 rounded-xl
+                      border transition-all duration-200 cursor-pointer
+                      ${hasUpvoted
+                        ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/20'
+                        : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-orange-500 hover:text-orange-500'
+                      }
+                    `}
+                  >
+                    <ChevronUp className="w-4.5 h-4.5 sm:w-5.5 sm:h-5.5" />
+                    <span className="text-xs sm:text-sm font-bold">{upvotes}</span>
+                  </button>
                 </div>
 
-                {/* Snappy upvote button */}
-                <button
-                  onClick={handleUpvote}
-                  className={`
-                    flex-shrink-0 flex flex-col items-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2.5 rounded-xl
-                    border transition-all duration-200 cursor-pointer
-                    ${hasUpvoted
-                      ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/20'
-                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-orange-500 hover:text-orange-500'
-                    }
-                  `}
-                >
-                  <ChevronUp className="w-4.5 h-4.5 sm:w-5.5 sm:h-5.5" />
-                  <span className="text-xs sm:text-sm font-bold">{upvotes}</span>
-                </button>
-              </div>
-
-              {/* Looking For Tags */}
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {lookingFor.map((role) => (
-                  <span key={role} className="px-2 py-0.5 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/40 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold">
-                    {role}
-                  </span>
-                ))}
+                {/* Looking For Tags */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {lookingFor.map((role) => (
+                    <span key={role} className="px-2 py-0.5 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/40 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold">
+                      {role}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {/* Card Footer */}
