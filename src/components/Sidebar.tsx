@@ -9,7 +9,8 @@ import {
   Award,
   Clock,
   Sparkles,
-  Coffee
+  Coffee,
+  Trophy
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { cn } from '../lib/utils';
@@ -21,6 +22,7 @@ const navItems = [
   { icon: MessageSquare, label: 'Discussions', href: '/discussions' },
   { icon: Users, label: 'Makers', href: '/makers' },
   { icon: Coffee, label: 'Lounge', href: '/lounge' },
+  { icon: Trophy, label: 'Hackathons', href: '/hackathons' },
 ];
 
 const categories = [
