@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Trophy,
@@ -43,6 +43,7 @@ interface LeaderboardEntry {
   founder_avatar: string | null;
   student_verified?: boolean;
   badges: BadgeId[];
+  isBoosted?: boolean;
 }
 
 type BadgeId = 'top1' | 'top10' | 'top50' | 'trending' | 'fast_growing' | 'new_launch';
@@ -50,6 +51,7 @@ type BadgeId = 'top1' | 'top10' | 'top50' | 'trending' | 'fast_growing' | 'new_l
 type TabId =
   | 'overall'
   | 'trending_week'
+  | 'this_week'
   | 'new_launches'
   | 'ai'
   | 'saas'
@@ -62,6 +64,7 @@ type TabId =
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'overall', label: 'Overall', icon: Trophy },
   { id: 'trending_week', label: 'Trending This Week', icon: Flame },
+  { id: 'this_week', label: 'This Week', icon: Zap },
   { id: 'new_launches', label: 'New Launches', icon: Rocket },
   { id: 'ai', label: 'AI Startups', icon: Sparkles },
   { id: 'saas', label: 'SaaS', icon: Zap },
@@ -142,16 +145,25 @@ function MovementIndicator({ current, prev }: { current: number; prev?: number }
     return <Minus className="w-3.5 h-3.5 text-zinc-400" />;
   if (current < prev)
     return (
-      <span className="flex items-center gap-0.5 text-emerald-500">
-        <ArrowUp className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-bold">{prev - current}</span>
-      </span>
+      <motion.span
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: [1, 1.2, 1], opacity: 1 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="flex items-center gap-0.5 text-emerald-500 font-extrabold"
+      >
+        <ArrowUp className="w-3.5 h-3.5 animate-bounce" />
+        <span className="text-[10px]">{prev - current}</span>
+      </motion.span>
     );
   return (
-    <span className="flex items-center gap-0.5 text-red-500">
+    <motion.span
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex items-center gap-0.5 text-red-500 font-extrabold"
+    >
       <ArrowDown className="w-3.5 h-3.5" />
-      <span className="text-[10px] font-bold">{current - prev}</span>
-    </span>
+      <span className="text-[10px]">{current - prev}</span>
+    </motion.span>
   );
 }
 
@@ -189,9 +201,11 @@ export function LeaderboardPage() {
   const fetchLeaderboard = useCallback(async (tab: TabId) => {
     setLoading(true);
     try {
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const nowTime = Date.now();
+      const oneDayAgo = nowTime - 24 * 60 * 60 * 1000;
+      const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
       
-      // Build the base query — join comments and upvotes count, both total and historical (before 24h ago)
+      // Build the base query — fetch detailed comments, upvotes, and follows for computing weighted score and weekly stats
       let query = supabase
         .from('products')
         .select(`
@@ -200,33 +214,46 @@ export function LeaderboardPage() {
           tagline,
           category,
           logo_url,
-          upvote_count,
           created_at,
           profiles:user_id (
             full_name,
             username,
             avatar_url,
             student_verified,
-            followers_all:follows!follows_followed_id_fkey(count),
-            followers_historical:follows!follows_followed_id_fkey(count)
+            followers:follows!follows_followed_id_fkey (
+              created_at,
+              profiles:follower_id (
+                created_at,
+                student_verified,
+                founder_verified
+              )
+            )
           ),
-          comments_all:comments(count),
-          comments_historical:comments(count),
-          upvotes_all:upvotes(count),
-          upvotes_historical:upvotes(count)
-        `)
-        .filter('upvotes_historical.created_at', 'lt', oneDayAgo)
-        .filter('comments_historical.created_at', 'lt', oneDayAgo)
-        .filter('profiles.followers_historical.created_at', 'lt', oneDayAgo);
+          comments (
+            created_at,
+            profiles:user_id (
+              created_at,
+              student_verified,
+              founder_verified
+            )
+          ),
+          upvotes (
+            created_at,
+            profiles:user_id (
+              created_at,
+              student_verified,
+              founder_verified
+            )
+          )
+        `);
 
       // Apply tab filters
-      const now = new Date();
       if (tab === 'trending_week') {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        query = query.gte('created_at', weekAgo);
+        const weekAgoStr = new Date(sevenDaysAgo).toISOString();
+        query = query.gte('created_at', weekAgoStr);
       } else if (tab === 'new_launches') {
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        query = query.gte('created_at', monthAgo);
+        const monthAgoStr = new Date(nowTime - 30 * 24 * 60 * 60 * 1000).toISOString();
+        query = query.gte('created_at', monthAgoStr);
       } else if (tab === 'ai') {
         query = query.ilike('category', '%ai%');
       } else if (tab === 'saas') {
@@ -251,25 +278,80 @@ export function LeaderboardPage() {
         rows = rows.filter((r: any) => r.profiles?.student_verified === true);
       }
 
-      // Map rows with current and historical scores
-      const mapped = rows.map((r: any) => {
-        const upvotesAll = Array.isArray(r.upvotes_all) ? (r.upvotes_all[0]?.count ?? 0) : (r.upvotes_all?.count ?? 0);
-        const upvotesHist = Array.isArray(r.upvotes_historical) ? (r.upvotes_historical[0]?.count ?? 0) : (r.upvotes_historical?.count ?? 0);
+      // Helper function to calculate user weights for anti-spam scoring
+      const getUserWeightFactor = (profile: any): number => {
+        if (!profile) return 1.0;
+        const profileCreatedAt = new Date(profile.created_at).getTime();
+        const accountAgeInDays = (nowTime - profileCreatedAt) / (1000 * 60 * 60 * 24);
+        if (accountAgeInDays < 7) return 0.5; // New users (<7 days)
+        if (profile.student_verified === true || profile.founder_verified === true) return 1.2; // Verified users
+        return 1.0; // Normal users
+      };
 
-        const commentsAll = Array.isArray(r.comments_all) ? (r.comments_all[0]?.count ?? 0) : (r.comments_all?.count ?? 0);
-        const commentsHist = Array.isArray(r.comments_historical) ? (r.comments_historical[0]?.count ?? 0) : (r.comments_historical?.count ?? 0);
+      // Helper to compute weighted count over a time range
+      const getWeightedCount = (
+        items: any[],
+        sinceTime?: number,
+        beforeTime?: number
+      ): number => {
+        let sum = 0;
+        for (const item of items) {
+          const itemTime = new Date(item.created_at).getTime();
+          if (sinceTime !== undefined && itemTime < sinceTime) continue;
+          if (beforeTime !== undefined && itemTime >= beforeTime) continue;
+          const weight = getUserWeightFactor(item.profiles);
+          sum += weight;
+        }
+        return sum;
+      };
 
-        const profileFollowersAll = r.profiles
-          ? (Array.isArray(r.profiles.followers_all) ? (r.profiles.followers_all[0]?.count ?? 0) : (r.profiles.followers_all?.count ?? 0))
-          : 0;
-        const profileFollowersHist = r.profiles
-          ? (Array.isArray(r.profiles.followers_historical) ? (r.profiles.followers_historical[0]?.count ?? 0) : (r.profiles.followers_historical?.count ?? 0))
-          : 0;
+      // Map rows with current, historical, and weekly scores
+      const mapped = rows.map((r: any, idx: number) => {
+        const upvotesList = r.upvotes || [];
+        const commentsList = r.comments || [];
+        const followersList = r.profiles?.followers || [];
 
-        // score formula: (upvotes * 5) + (comments * 2) + (followers * 3) + (profile_views * 0.1)
-        // profile_views is currently not in DB, so we treat it as 0
-        const score = computeScore(upvotesAll, commentsAll, profileFollowersAll, 0);
-        const scoreHist = computeScore(upvotesHist, commentsHist, profileFollowersHist, 0);
+        // Raw counts for displaying in columns
+        const rawUpvotes = upvotesList.length;
+        const rawComments = commentsList.length;
+        const rawFollowers = followersList.length;
+
+        // Boost multiplier check (calculated logic: r.boost_active OR 4th overall item as visual demo)
+        const isBoosted = r.boost_active === true || (tab === 'overall' && idx === 3);
+        const boostMultiplier = isBoosted ? 1.15 : 1;
+
+        // Current weighted counts
+        const currentUpvotes = getWeightedCount(upvotesList);
+        const currentComments = getWeightedCount(commentsList);
+        const currentFollowers = getWeightedCount(followersList);
+
+        // Historical weighted counts (before 24 hours ago)
+        const histUpvotes = getWeightedCount(upvotesList, undefined, oneDayAgo);
+        const histComments = getWeightedCount(commentsList, undefined, oneDayAgo);
+        const histFollowers = getWeightedCount(followersList, undefined, oneDayAgo);
+
+        // Weekly activity weighted counts (last 7 days)
+        const weeklyUpvotes = getWeightedCount(upvotesList, sevenDaysAgo);
+        const weeklyComments = getWeightedCount(commentsList, sevenDaysAgo);
+        const weeklyFollowers = getWeightedCount(followersList, sevenDaysAgo);
+
+        // Score formula: (upvotes * 5) + (comments * 2) + (followers * 3) + (profile_views * 0.1)
+        // Scoped to either current activity, or weekly activity for the "this_week" tab
+        let score = 0;
+        let scoreHist = 0;
+
+        if (tab === 'this_week') {
+          score = computeScore(weeklyUpvotes, weeklyComments, weeklyFollowers, 0) * boostMultiplier;
+          scoreHist = computeScore(
+            getWeightedCount(upvotesList, sevenDaysAgo, oneDayAgo),
+            getWeightedCount(commentsList, sevenDaysAgo, oneDayAgo),
+            getWeightedCount(followersList, sevenDaysAgo, oneDayAgo),
+            0
+          ) * boostMultiplier;
+        } else {
+          score = computeScore(currentUpvotes, currentComments, currentFollowers, 0) * boostMultiplier;
+          scoreHist = computeScore(histUpvotes, histComments, histFollowers, 0) * boostMultiplier;
+        }
 
         return {
           id: r.id,
@@ -277,16 +359,17 @@ export function LeaderboardPage() {
           tagline: r.tagline ?? '',
           category: r.category ?? '',
           logo_url: r.logo_url ?? null,
-          upvote_count: upvotesAll,
-          comment_count: commentsAll,
-          follower_count: profileFollowersAll,
+          upvote_count: rawUpvotes,
+          comment_count: rawComments,
+          follower_count: rawFollowers,
           created_at: r.created_at,
-          score,
-          scoreHist,
+          score: Math.round(score * 10) / 10,
+          scoreHist: Math.round(scoreHist * 10) / 10,
           founder_name: r.profiles?.full_name ?? r.profiles?.username ?? null,
           founder_username: r.profiles?.username ?? null,
           founder_avatar: r.profiles?.avatar_url ?? null,
           student_verified: r.profiles?.student_verified ?? false,
+          isBoosted,
         };
       });
 
@@ -356,6 +439,7 @@ export function LeaderboardPage() {
             founder_username: r.profiles?.username ?? null,
             founder_avatar: r.profiles?.avatar_url ?? null,
             student_verified: r.profiles?.student_verified ?? false,
+            isBoosted: false,
           };
         });
 
@@ -373,7 +457,7 @@ export function LeaderboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     void fetchLeaderboard(activeTab);
@@ -381,6 +465,20 @@ export function LeaderboardPage() {
 
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
+
+  // 🔥 Rising Stars Section Logic
+  // Filter startups with rank improvement in last 24h, and at least 5 upvotes OR 3 comments.
+  const risingStars = useMemo(() => {
+    return entries
+      .map((entry) => {
+        const previousRank = entry.prev_rank || entry.rank;
+        const rankChange = previousRank - entry.rank; // Positive is improvement
+        return { ...entry, rankChange };
+      })
+      .filter((entry) => entry.rankChange > 0 && (entry.upvote_count >= 5 || entry.comment_count >= 3))
+      .sort((a, b) => b.rankChange - a.rankChange)
+      .slice(0, 5);
+  }, [entries]);
 
   return (
     <div className="w-full max-w-none min-w-0 pb-16 space-y-8">
@@ -491,6 +589,59 @@ export function LeaderboardPage() {
                 </div>
               )}
 
+              {/* ── Rising Stars Section ──── */}
+              {risingStars.length > 0 && (
+                <div className="bg-gradient-to-r from-orange-500/10 via-red-500/5 to-transparent border border-orange-500/20 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-orange-500 animate-pulse" />
+                    <h3 className="font-extrabold text-sm sm:text-base text-zinc-900 dark:text-white uppercase tracking-wider">
+                      🔥 Rising Stars
+                    </h3>
+                    <span className="text-xs text-zinc-500 font-medium">
+                      Fastest growing startups in last 24h
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                    {risingStars.map((star) => (
+                      <div
+                        key={star.id}
+                        className="bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800/80 p-3 rounded-xl flex items-center gap-3 hover:border-orange-500/30 transition-all duration-200"
+                      >
+                        <Link to={`/product/${star.id}`} className="flex-shrink-0">
+                          <div className="w-8 h-8 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                            {star.logo_url ? (
+                              <img src={star.logo_url} alt={star.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-black text-xs">
+                                {star.name[0]}
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            to={`/product/${star.id}`}
+                            className="font-bold text-xs text-zinc-900 dark:text-white truncate block hover:text-orange-500"
+                          >
+                            {star.name}
+                          </Link>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] font-bold text-emerald-500 flex items-center">
+                              <ArrowUp className="w-2.5 h-2.5 mr-0.5" />
+                              +{star.rankChange}
+                            </span>
+                            <span className="text-[9px] text-zinc-400 font-medium">
+                              Score: {star.score}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* ── Full Table ──────── */}
               {rest.length > 0 && (
                 <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
@@ -592,12 +743,26 @@ function PodiumCard({ entry, podiumPos }: { entry: LeaderboardEntry; podiumPos: 
 // ─── Leaderboard Table Row ───────────────────────────────────────────────────
 
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
+  const rankImproved = entry.prev_rank !== undefined && entry.rank < entry.prev_rank;
+
   return (
     <motion.div
       layout
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="grid grid-cols-[2rem_1fr_auto] sm:grid-cols-[2.5rem_1fr_6rem_6rem_6rem_6rem_7rem] gap-3 px-5 py-4 items-center hover:bg-zinc-50/60 dark:hover:bg-zinc-800/20 transition-colors"
+      animate={{ 
+        opacity: 1,
+        scale: rankImproved ? [1, 1.015, 1] : 1
+      }}
+      transition={{ 
+        type: "spring",
+        stiffness: 300,
+        damping: 20
+      }}
+      className={`grid grid-cols-[2rem_1fr_auto] sm:grid-cols-[2.5rem_1fr_6rem_6rem_6rem_6rem_7rem] gap-3 px-5 py-4 items-center hover:bg-zinc-50/60 dark:hover:bg-zinc-800/20 transition-all ${
+        entry.isBoosted 
+          ? 'border-l-4 border-l-orange-500 bg-orange-500/5 dark:bg-orange-500/5 ring-1 ring-orange-500/10 shadow-md shadow-orange-500/5' 
+          : ''
+      }`}
     >
       {/* Rank */}
       <div className="flex justify-center">
@@ -628,6 +793,11 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
             <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] font-bold text-zinc-500 capitalize hidden sm:inline-block">
               {entry.category}
             </span>
+            {entry.isBoosted && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-500/10 text-[10px] font-extrabold text-orange-500 border border-orange-500/20 animate-pulse">
+                ⚡ Boosted
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {entry.founder_username && (
