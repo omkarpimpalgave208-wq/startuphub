@@ -13,10 +13,12 @@ import {
   LogOut,
   Bookmark,
   MessageSquare,
-  UserPlus
+  UserPlus,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
+import { useAdminStore } from '../store/adminStore';
 import { api } from '../lib/api';
 import { Button } from './ui/Button';
 import { Avatar } from './ui/Avatar';
@@ -25,6 +27,7 @@ import { SearchModal } from './SearchModal';
 import { NotificationsPanel } from './NotificationsPanel';import { Logo } from './Logo';
 export function Navbar() {
   const { user, profile, signOut } = useAuthStore();
+  const { isAdmin } = useAdminStore();
   const { darkMode, toggleDarkMode, sidebarOpen, setSidebarOpen, setSearchOpen, searchOpen, notificationsOpen, setNotificationsOpen } = useUIStore();
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
@@ -198,6 +201,18 @@ export function Navbar() {
                     <Plus className="w-4 h-4 mr-1" />
                     <span className="hidden md:inline">Launch</span>
                   </Button>
+
+                  {/* Admin Dashboard icon — visible only to admins */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => navigate('/admin')}
+                      className="relative p-2 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/20 hidden sm:flex flex-shrink-0 group"
+                      aria-label="Admin Dashboard"
+                      title="Admin Dashboard"
+                    >
+                      <ShieldCheck className="w-5 h-5 text-orange-500" />
+                    </button>
+                  )}
 
                   {/* Notifications */}
                   <button

@@ -25,6 +25,7 @@ const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then(module => 
 const MessagesPage = lazy(() => import('./pages/MessagesPage').then(module => ({ default: module.MessagesPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(module => ({ default: module.NotFoundPage })));
 const HackathonsPage = lazy(() => import('./pages/HackathonsPage').then(module => ({ default: module.HackathonsPage })));
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
 
 import { supabase } from './lib/supabase';
 
@@ -75,6 +76,7 @@ function App() {
             <Route path="bookmarks" element={<BookmarksPage />} />
             <Route path="login" element={<LoginPage />} />
             <Route path="signup" element={<SignupPage />} />
+            <Route path="admin" element={<AdminDashboardPage />} />
             
             {/* 404 Catch All */}
             <Route path="*" element={<NotFoundPage />} />

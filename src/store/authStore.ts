@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { handleGoogleRedirect } from '../lib/googleAuth';
 import { api } from '../lib/api';
 import type { Profile } from '../types';
+import { useAdminStore } from './adminStore';
 
 interface AuthState {
   user: any | null;
@@ -35,6 +36,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     if (!isSupabaseConfigured) {
       set({ user: null, profile: null });
+      useAdminStore.getState().resetAdmin();
       return;
     }
 
@@ -50,6 +52,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('SignOut error:', err);
     } finally {
       set({ user: null, profile: null });
+      useAdminStore.getState().resetAdmin();
     }
   },
   
@@ -164,6 +167,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       const profile = await createFallbackProfile(session.user);
       set({ user: session.user, profile });
+      // Derive admin status from the authenticated user
+      await useAdminStore.getState().checkAdmin(session.user);
     } catch (err) {
       console.error('[auth] Auth initialization error:', err);
       // Avoid clearStaleSession on generic/temporary runtime errors to prevent force-logging out valid sessions
@@ -181,6 +186,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           try {
             const profile = await createFallbackProfile(session.user);
             set({ user: session.user, profile });
+            await useAdminStore.getState().checkAdmin(session.user);
           } catch (err) {
             console.warn('[auth] Mismatched auth state transition blocked.', err);
             await clearStaleSession('auth state transition mismatch');
@@ -188,6 +194,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       } else {
         set({ user: null, profile: null });
+        useAdminStore.getState().resetAdmin();
       }
       set({ loading: false });
     });
