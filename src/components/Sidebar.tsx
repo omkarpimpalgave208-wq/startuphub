@@ -10,7 +10,8 @@ import {
   Clock,
   Sparkles,
   Coffee,
-  Trophy
+  Trophy,
+  BarChart2
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { cn } from '../lib/utils';
@@ -23,6 +24,7 @@ const navItems = [
   { icon: Users, label: 'Makers', href: '/makers' },
   { icon: Coffee, label: 'Lounge', href: '/lounge' },
   { icon: Trophy, label: 'Hackathons', href: '/hackathons' },
+  { icon: BarChart2, label: 'Leaderboard', href: '/leaderboard' },
 ];
 
 const categories = [

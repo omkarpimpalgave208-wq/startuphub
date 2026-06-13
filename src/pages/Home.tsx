@@ -20,6 +20,7 @@ import { useUIStore } from '../store/uiStore';
 import { api } from '../lib/api';
 import { Avatar } from '../components/ui/Avatar';
 import { ProductCard } from '../components/ProductCard';
+import { LeaderboardWidget } from '../components/ui/LeaderboardWidget';
 import type { Product, Discussion } from '../types';
 
 export function Home() {
@@ -277,6 +278,9 @@ export function Home() {
           </div>
         )}
       </section>
+
+      {/* SECTION: TOP STARTUPS LEADERBOARD WIDGET */}
+      <LeaderboardWidget />
 
       {/* SECTION 4: WHY STARTUPHUB */}
       <section className="space-y-8">
