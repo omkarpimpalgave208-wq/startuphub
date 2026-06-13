@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Trophy,
@@ -18,15 +18,19 @@ import {
   Crown,
   Flame,
   Sparkles,
+  Swords,
+  Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { Avatar } from '../components/ui/Avatar';
+import { StartupBattle } from '../components/StartupBattle';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 interface LeaderboardEntry {
   id: string;
+  user_id: string;
   name: string;
   tagline: string;
   category: string;
@@ -44,12 +48,15 @@ interface LeaderboardEntry {
   student_verified?: boolean;
   badges: BadgeId[];
   isBoosted?: boolean;
+  isMvp?: boolean;
 }
 
-type BadgeId = 'top1' | 'top10' | 'top50' | 'trending' | 'fast_growing' | 'new_launch';
+type BadgeId = 'top1' | 'top10' | 'top50' | 'trending' | 'fast_growing' | 'new_launch' | 'mvp';
 
 type TabId =
   | 'overall'
+  | 'season_week'
+  | 'season_month'
   | 'trending_week'
   | 'this_week'
   | 'new_launches'
@@ -57,12 +64,22 @@ type TabId =
   | 'saas'
   | 'mobile'
   | 'web3'
-  | 'student';
+  | 'student'
+  | 'battle';
+
+interface ActivityEvent {
+  id: string;
+  text: string;
+  timestamp: Date;
+  type: 'upvote' | 'comment' | 'follow' | 'rank_shift' | 'new_startup';
+}
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: 'overall', label: 'Overall', icon: Trophy },
+  { id: 'overall', label: 'All Time', icon: Trophy },
+  { id: 'season_week', label: 'Season Week', icon: Medal },
+  { id: 'season_month', label: 'Season Month', icon: Star },
   { id: 'trending_week', label: 'Trending This Week', icon: Flame },
   { id: 'this_week', label: 'This Week', icon: Zap },
   { id: 'new_launches', label: 'New Launches', icon: Rocket },
@@ -71,6 +88,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'mobile', label: 'Mobile Apps', icon: Star },
   { id: 'web3', label: 'Web3', icon: TrendingUp },
   { id: 'student', label: 'Student Startups', icon: Medal },
+  { id: 'battle', label: '⚔️ Battle Mode', icon: Swords },
 ];
 
 const BADGE_CONFIG: Record<BadgeId, { label: string; color: string; icon: React.ElementType }> = {
@@ -80,6 +98,17 @@ const BADGE_CONFIG: Record<BadgeId, { label: string; color: string; icon: React.
   trending: { label: 'Trending Startup', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-300 dark:border-rose-700', icon: Flame },
   fast_growing: { label: 'Fast Growing Startup', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700', icon: TrendingUp },
   new_launch: { label: 'New Launch', color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 border-sky-300 dark:border-sky-700', icon: Rocket },
+  mvp: { label: '🔥 MVP Startup', color: 'bg-red-100 text-red-700 dark:bg-red-950/20 dark:text-red-400 border-red-300 dark:border-red-700 font-extrabold', icon: Crown },
+};
+
+const SEASONAL_BADGE_LABELS: Record<BadgeId, string> = {
+  top1: '🥇 Season Winner',
+  top10: '🏅 Season Top 10',
+  top50: 'Season Top 50',
+  mvp: '🔥 Season MVP',
+  trending: 'Trending',
+  fast_growing: 'Fast Growing',
+  new_launch: 'New Launch',
 };
 
 // ─── Score Formula ──────────────────────────────────────────────────────────
@@ -89,11 +118,13 @@ function computeScore(upvotes: number, comments: number, followers: number, prof
   return upvotes * 5 + comments * 2 + followers * 3 + profileViews * 0.1;
 }
 
-function assignBadges(entry: Omit<LeaderboardEntry, 'badges'>, rank: number, createdAt: string): BadgeId[] {
+function assignBadges(entry: Omit<LeaderboardEntry, 'badges'>, rank: number, createdAt: string, isMvp: boolean): BadgeId[] {
   const badges: BadgeId[] = [];
   if (rank === 1) badges.push('top1');
   else if (rank <= 10) badges.push('top10');
   else if (rank <= 50) badges.push('top50');
+
+  if (isMvp) badges.push('mvp');
 
   const daysSinceLaunch = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24);
   if (daysSinceLaunch <= 7) badges.push('new_launch');
@@ -108,6 +139,32 @@ function assignBadges(entry: Omit<LeaderboardEntry, 'badges'>, rank: number, cre
   if (daysSinceLaunch <= 14 && entry.upvote_count >= 3) badges.push('trending');
 
   return badges;
+}
+
+// ─── UTC Seasonal Helpers ───────────────────────────────────────────────────
+
+function getUTCSeasonWeekStart(): Date {
+  const now = new Date();
+  const utcDay = now.getUTCDay(); // 0 is Sunday, 1 is Monday...
+  const utcDate = now.getUTCDate();
+  const seasonStart = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    utcDate - utcDay,
+    0, 0, 0, 0
+  ));
+  return seasonStart;
+}
+
+function getUTCSeasonMonthStart(): Date {
+  const now = new Date();
+  const seasonStart = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    1,
+    0, 0, 0, 0
+  ));
+  return seasonStart;
 }
 
 // ─── Rank Medal ─────────────────────────────────────────────────────────────
@@ -169,20 +226,21 @@ function MovementIndicator({ current, prev }: { current: number; prev?: number }
 
 // ─── Badge Chips ─────────────────────────────────────────────────────────────
 
-function BadgeChips({ badges }: { badges: BadgeId[] }) {
+function BadgeChips({ badges, isSeasonal }: { badges: BadgeId[]; isSeasonal?: boolean }) {
   if (!badges.length) return null;
   return (
     <div className="flex flex-wrap gap-1">
       {badges.slice(0, 2).map((id) => {
         const cfg = BADGE_CONFIG[id];
         const Icon = cfg.icon;
+        const label = isSeasonal && SEASONAL_BADGE_LABELS[id] ? SEASONAL_BADGE_LABELS[id] : cfg.label;
         return (
           <span
             key={id}
             className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold ${cfg.color}`}
           >
             <Icon className="w-2.5 h-2.5" />
-            {cfg.label}
+            {label}
           </span>
         );
       })}
@@ -197,6 +255,44 @@ export function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  
+  // Real-Time Activity Feed state
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+
+  // Refs for tracking changes and lookup caching
+  const nameCacheRef = useRef<Record<string, string>>({});
+  const prevRankingsRef = useRef<Record<string, number>>({});
+  const activeTabRef = useRef<TabId>('overall');
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Maintain active tab in ref to avoid resubscribing to Postgres on tab changes
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  // Caching name resolver
+  const getName = useCallback(async (id: string, type: 'product' | 'profile'): Promise<string> => {
+    if (nameCacheRef.current[id]) {
+      return nameCacheRef.current[id];
+    }
+    try {
+      if (type === 'product') {
+        const { data } = await supabase.from('products').select('name').eq('id', id).single();
+        if (data?.name) {
+          nameCacheRef.current[id] = data.name;
+          return data.name;
+        }
+      } else {
+        const { data } = await supabase.from('profiles').select('full_name, username').eq('id', id).single();
+        const name = data?.full_name || data?.username || 'Someone';
+        nameCacheRef.current[id] = name;
+        return name;
+      }
+    } catch (err) {
+      console.error('Error fetching name:', err);
+    }
+    return type === 'product' ? 'a startup' : 'Someone';
+  }, []);
 
   const fetchLeaderboard = useCallback(async (tab: TabId) => {
     setLoading(true);
@@ -205,6 +301,10 @@ export function LeaderboardPage() {
       const oneDayAgo = nowTime - 24 * 60 * 60 * 1000;
       const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
       
+      // UTC-based Seasonal start dates
+      const seasonWeekStart = getUTCSeasonWeekStart().getTime();
+      const seasonMonthStart = getUTCSeasonMonthStart().getTime();
+
       // Build the base query — fetch detailed comments, upvotes, and follows for computing weighted score and weekly stats
       let query = supabase
         .from('products')
@@ -215,7 +315,9 @@ export function LeaderboardPage() {
           category,
           logo_url,
           created_at,
+          user_id,
           profiles:user_id (
+            id,
             full_name,
             username,
             avatar_url,
@@ -251,6 +353,12 @@ export function LeaderboardPage() {
       if (tab === 'trending_week') {
         const weekAgoStr = new Date(sevenDaysAgo).toISOString();
         query = query.gte('created_at', weekAgoStr);
+      } else if (tab === 'season_week') {
+        const weekAgoStr = new Date(seasonWeekStart).toISOString();
+        query = query.gte('created_at', weekAgoStr);
+      } else if (tab === 'season_month') {
+        const monthAgoStr = new Date(seasonMonthStart).toISOString();
+        query = query.gte('created_at', monthAgoStr);
       } else if (tab === 'new_launches') {
         const monthAgoStr = new Date(nowTime - 30 * 24 * 60 * 60 * 1000).toISOString();
         query = query.gte('created_at', monthAgoStr);
@@ -305,16 +413,33 @@ export function LeaderboardPage() {
         return sum;
       };
 
+      // Find the MVP startup ID (the one with the highest overall upvote count)
+      let mvpStartupId = '';
+      let maxUpvotes = -1;
+      rows.forEach((r: any) => {
+        const upvotesCount = (r.upvotes || []).length;
+        if (upvotesCount > maxUpvotes) {
+          maxUpvotes = upvotesCount;
+          mvpStartupId = r.id;
+        }
+      });
+
       // Map rows with current, historical, and weekly scores
       const mapped = rows.map((r: any, idx: number) => {
         const upvotesList = r.upvotes || [];
         const commentsList = r.comments || [];
         const followersList = r.profiles?.followers || [];
 
-        // Raw counts for displaying in columns
+        // Raw counts for caching/displaying
         const rawUpvotes = upvotesList.length;
         const rawComments = commentsList.length;
         const rawFollowers = followersList.length;
+
+        // Populate lookup cache for realtime feed optimization
+        nameCacheRef.current[r.id] = r.name;
+        if (r.profiles?.id) {
+          nameCacheRef.current[r.profiles.id] = r.profiles.full_name || r.profiles.username || 'Founder';
+        }
 
         // Boost multiplier check (calculated logic: r.boost_active OR 4th overall item as visual demo)
         const isBoosted = r.boost_active === true || (tab === 'overall' && idx === 3);
@@ -336,9 +461,12 @@ export function LeaderboardPage() {
         const weeklyFollowers = getWeightedCount(followersList, sevenDaysAgo);
 
         // Score formula: (upvotes * 5) + (comments * 2) + (followers * 3) + (profile_views * 0.1)
-        // Scoped to either current activity, or weekly activity for the "this_week" tab
+        // Scoped to either current activity, or weekly/seasonal activity
         let score = 0;
         let scoreHist = 0;
+        let displayUpvotes = rawUpvotes;
+        let displayComments = rawComments;
+        let displayFollowers = rawFollowers;
 
         if (tab === 'this_week') {
           score = computeScore(weeklyUpvotes, weeklyComments, weeklyFollowers, 0) * boostMultiplier;
@@ -348,6 +476,37 @@ export function LeaderboardPage() {
             getWeightedCount(followersList, sevenDaysAgo, oneDayAgo),
             0
           ) * boostMultiplier;
+          displayUpvotes = upvotesList.filter((x: any) => new Date(x.created_at).getTime() >= sevenDaysAgo).length;
+          displayComments = commentsList.filter((x: any) => new Date(x.created_at).getTime() >= sevenDaysAgo).length;
+          displayFollowers = followersList.filter((x: any) => new Date(x.created_at).getTime() >= sevenDaysAgo).length;
+        } else if (tab === 'season_week') {
+          const seasonUpvotes = getWeightedCount(upvotesList, seasonWeekStart);
+          const seasonComments = getWeightedCount(commentsList, seasonWeekStart);
+          const seasonFollowers = getWeightedCount(followersList, seasonWeekStart);
+          score = computeScore(seasonUpvotes, seasonComments, seasonFollowers, 0) * boostMultiplier;
+          
+          const seasonUpvotesHist = getWeightedCount(upvotesList, seasonWeekStart, oneDayAgo);
+          const seasonCommentsHist = getWeightedCount(commentsList, seasonWeekStart, oneDayAgo);
+          const seasonFollowersHist = getWeightedCount(followersList, seasonWeekStart, oneDayAgo);
+          scoreHist = computeScore(seasonUpvotesHist, seasonCommentsHist, seasonFollowersHist, 0) * boostMultiplier;
+
+          displayUpvotes = upvotesList.filter((x: any) => new Date(x.created_at).getTime() >= seasonWeekStart).length;
+          displayComments = commentsList.filter((x: any) => new Date(x.created_at).getTime() >= seasonWeekStart).length;
+          displayFollowers = followersList.filter((x: any) => new Date(x.created_at).getTime() >= seasonWeekStart).length;
+        } else if (tab === 'season_month') {
+          const seasonUpvotes = getWeightedCount(upvotesList, seasonMonthStart);
+          const seasonComments = getWeightedCount(commentsList, seasonMonthStart);
+          const seasonFollowers = getWeightedCount(followersList, seasonMonthStart);
+          score = computeScore(seasonUpvotes, seasonComments, seasonFollowers, 0) * boostMultiplier;
+          
+          const seasonUpvotesHist = getWeightedCount(upvotesList, seasonMonthStart, oneDayAgo);
+          const seasonCommentsHist = getWeightedCount(commentsList, seasonMonthStart, oneDayAgo);
+          const seasonFollowersHist = getWeightedCount(followersList, seasonMonthStart, oneDayAgo);
+          scoreHist = computeScore(seasonUpvotesHist, seasonCommentsHist, seasonFollowersHist, 0) * boostMultiplier;
+
+          displayUpvotes = upvotesList.filter((x: any) => new Date(x.created_at).getTime() >= seasonMonthStart).length;
+          displayComments = commentsList.filter((x: any) => new Date(x.created_at).getTime() >= seasonMonthStart).length;
+          displayFollowers = followersList.filter((x: any) => new Date(x.created_at).getTime() >= seasonMonthStart).length;
         } else {
           score = computeScore(currentUpvotes, currentComments, currentFollowers, 0) * boostMultiplier;
           scoreHist = computeScore(histUpvotes, histComments, histFollowers, 0) * boostMultiplier;
@@ -355,13 +514,14 @@ export function LeaderboardPage() {
 
         return {
           id: r.id,
+          user_id: r.user_id,
           name: r.name,
           tagline: r.tagline ?? '',
           category: r.category ?? '',
           logo_url: r.logo_url ?? null,
-          upvote_count: rawUpvotes,
-          comment_count: rawComments,
-          follower_count: rawFollowers,
+          upvote_count: displayUpvotes,
+          comment_count: displayComments,
+          follower_count: displayFollowers,
           created_at: r.created_at,
           score: Math.round(score * 10) / 10,
           scoreHist: Math.round(scoreHist * 10) / 10,
@@ -370,18 +530,17 @@ export function LeaderboardPage() {
           founder_avatar: r.profiles?.avatar_url ?? null,
           student_verified: r.profiles?.student_verified ?? false,
           isBoosted,
+          isMvp: r.id === mvpStartupId,
         };
       });
 
       // Compute rank movement
-      // 1. Sort by historical score to get previous ranks
       const prevSorted = [...mapped].sort((a, b) => b.scoreHist - a.scoreHist);
       const prevRanksMap: Record<string, number> = {};
       prevSorted.forEach((item, idx) => {
         prevRanksMap[item.id] = idx + 1;
       });
 
-      // 2. Sort by current score to get current ranks
       const currentSorted = [...mapped].sort((a, b) => b.score - a.score);
       const ranked: LeaderboardEntry[] = currentSorted.map((entry, idx) => {
         const rank = idx + 1;
@@ -389,34 +548,59 @@ export function LeaderboardPage() {
           ...entry,
           rank,
           prev_rank: prevRanksMap[entry.id],
-          badges: assignBadges(entry as any, rank, entry.created_at),
+          badges: assignBadges(entry as any, rank, entry.created_at, entry.isMvp === true),
         };
       });
 
+      // Rank Shift Notification logic (entering Top 10)
+      const currentRanks: Record<string, number> = {};
+      ranked.forEach(e => {
+        currentRanks[e.id] = e.rank;
+      });
+
+      if (Object.keys(prevRankingsRef.current).length > 0) {
+        ranked.forEach(e => {
+          const oldRank = prevRankingsRef.current[e.id];
+          const newRank = e.rank;
+          if (newRank <= 10 && (oldRank === undefined || oldRank > 10)) {
+            setActivityEvents(prev => [
+              {
+                id: `rank-${e.id}-${Date.now()}`,
+                text: `🏆 ${e.name} entered the Top 10!`,
+                timestamp: new Date(),
+                type: 'rank_shift'
+              },
+              ...prev
+            ].slice(0, 20));
+          }
+        });
+      }
+
+      prevRankingsRef.current = currentRanks;
       setEntries(ranked);
       setLastRefresh(new Date());
     } catch (err) {
       console.error('[Leaderboard] Fetch failed:', err);
-      // Try simplified fallback without followers or nested count filter
+      // Fallback query logic
       try {
         let fallback = supabase
           .from('products')
           .select(`
-            id, name, tagline, category, logo_url, upvote_count, created_at,
+            id, user_id, name, tagline, category, logo_url, upvote_count, created_at,
             profiles:user_id(full_name, username, avatar_url, student_verified),
             comments:comments(count)
           `)
           .limit(100);
 
-        if (activeTab === 'ai') fallback = fallback.ilike('category', '%ai%');
-        else if (activeTab === 'saas') fallback = fallback.ilike('category', '%saas%');
-        else if (activeTab === 'mobile') fallback = fallback.ilike('category', '%mobile%');
-        else if (activeTab === 'web3') fallback = fallback.ilike('category', '%web3%');
+        if (tab === 'ai') fallback = fallback.ilike('category', '%ai%');
+        else if (tab === 'saas') fallback = fallback.ilike('category', '%saas%');
+        else if (tab === 'mobile') fallback = fallback.ilike('category', '%mobile%');
+        else if (tab === 'web3') fallback = fallback.ilike('category', '%web3%');
 
         const { data: fb } = await fallback;
         let fbRows = (fb ?? []) as any[];
 
-        if (activeTab === 'student') {
+        if (tab === 'student') {
           fbRows = fbRows.filter((r: any) => r.profiles?.student_verified === true);
         }
 
@@ -424,8 +608,15 @@ export function LeaderboardPage() {
           const commentCnt = Array.isArray(r.comments)
             ? (r.comments[0]?.count ?? 0)
             : (r.comments?.count ?? 0);
+          
+          nameCacheRef.current[r.id] = r.name;
+          if (r.profiles?.id) {
+            nameCacheRef.current[r.profiles.id] = r.profiles.full_name || r.profiles.username || 'Founder';
+          }
+
           return {
             id: r.id,
+            user_id: r.user_id,
             name: r.name,
             tagline: r.tagline ?? '',
             category: r.category ?? '',
@@ -448,7 +639,7 @@ export function LeaderboardPage() {
           fbMapped.map((e, i) => ({
             ...e,
             rank: i + 1,
-            badges: assignBadges(e as any, i + 1, e.created_at),
+            badges: assignBadges(e as any, i + 1, e.created_at, false),
           }))
         );
       } catch {
@@ -457,14 +648,254 @@ export function LeaderboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab]);
+  }, []);
 
+  // Debounce score recalculation to batch multiple updates and prevent heavy load
+  const triggerDebouncedFetch = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      void fetchLeaderboard(activeTabRef.current);
+    }, 400);
+  }, [fetchLeaderboard]);
+
+  const handleRealtimeEvent = useCallback((type: 'upvote' | 'comment' | 'follow' | 'product', payload: any) => {
+    // 1. Post event to activity feed
+    void (async () => {
+      try {
+        if (payload.eventType === 'INSERT') {
+          let text = '';
+          if (type === 'upvote') {
+            const userId = payload.new.user_id;
+            const productId = payload.new.product_id;
+            const uName = await getName(userId, 'profile');
+            const pName = await getName(productId, 'product');
+            text = `${uName} upvoted ${pName}!`;
+          } else if (type === 'comment') {
+            const userId = payload.new.user_id;
+            const productId = payload.new.product_id;
+            if (productId) {
+              const uName = await getName(userId, 'profile');
+              const pName = await getName(productId, 'product');
+              text = `${uName} commented on ${pName}`;
+            }
+          } else if (type === 'follow') {
+            const followerId = payload.new.follower_id;
+            const followedId = payload.new.followed_id;
+            const followerName = await getName(followerId, 'profile');
+            const followedName = await getName(followedId, 'profile');
+            text = `${followerName} followed ${followedName}`;
+          } else if (type === 'product') {
+            const name = payload.new.name;
+            text = `${name} just launched! 🚀`;
+            nameCacheRef.current[payload.new.id] = name;
+          }
+
+          if (text) {
+            setActivityEvents(prev => [
+              {
+                id: `${type}-${Date.now()}-${Math.random()}`,
+                text,
+                timestamp: new Date(),
+                type: type === 'product' ? 'new_startup' : type
+              },
+              ...prev
+            ].slice(0, 20));
+          }
+        }
+      } catch (err) {
+        console.error('Error handling realtime event:', err);
+      }
+    })();
+
+    // 2. Refresh scores and ranking
+    if (activeTabRef.current === 'battle') {
+      // Battle Mode: limit full DB recalculation, directly update in-memory entry values
+      if (type === 'upvote') {
+        const productId = payload.new?.product_id || payload.old?.product_id;
+        const isInsert = payload.eventType === 'INSERT';
+        if (productId) {
+          setEntries(prev => prev.map(entry => {
+            if (entry.id === productId) {
+              const diff = isInsert ? 1 : -1;
+              const newUpvotes = Math.max(0, entry.upvote_count + diff);
+              const newScore = computeScore(newUpvotes, entry.comment_count, entry.follower_count, 0);
+              return { ...entry, upvote_count: newUpvotes, score: Math.round(newScore * 10) / 10 };
+            }
+            return entry;
+          }));
+        }
+      } else if (type === 'comment') {
+        const productId = payload.new?.product_id || payload.old?.product_id;
+        const isInsert = payload.eventType === 'INSERT';
+        if (productId) {
+          setEntries(prev => prev.map(entry => {
+            if (entry.id === productId) {
+              const diff = isInsert ? 1 : -1;
+              const newComments = Math.max(0, entry.comment_count + diff);
+              const newScore = computeScore(entry.upvote_count, newComments, entry.follower_count, 0);
+              return { ...entry, comment_count: newComments, score: Math.round(newScore * 10) / 10 };
+            }
+            return entry;
+          }));
+        }
+      } else if (type === 'follow') {
+        const followedId = payload.new?.followed_id || payload.old?.followed_id;
+        const isInsert = payload.eventType === 'INSERT';
+        if (followedId) {
+          setEntries(prev => prev.map(entry => {
+            if (entry.user_id === followedId) {
+              const diff = isInsert ? 1 : -1;
+              const newFollowers = Math.max(0, entry.follower_count + diff);
+              const newScore = computeScore(entry.upvote_count, entry.comment_count, newFollowers, 0);
+              return { ...entry, follower_count: newFollowers, score: Math.round(newScore * 10) / 10 };
+            }
+            return entry;
+          }));
+        }
+      } else if (type === 'product') {
+        triggerDebouncedFetch();
+      }
+    } else {
+      // Standard tabs: debounced recalculation
+      triggerDebouncedFetch();
+    }
+  }, [getName, triggerDebouncedFetch]);
+
+  // Pre-populate historical activities on load
+  const fetchRecentActivities = useCallback(async () => {
+    try {
+      const [upvotesRes, commentsRes, productsRes] = await Promise.all([
+        supabase
+          .from('upvotes')
+          .select('created_at, user_id, product_id')
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('comments')
+          .select('created_at, user_id, product_id')
+          .not('product_id', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('products')
+          .select('id, name, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5)
+      ]);
+
+      const events: ActivityEvent[] = [];
+
+      if (productsRes.data) {
+        productsRes.data.forEach((p: any) => {
+          events.push({
+            id: `product-${p.id}`,
+            text: `${p.name} just launched! 🚀`,
+            timestamp: new Date(p.created_at),
+            type: 'new_startup'
+          });
+          nameCacheRef.current[p.id] = p.name;
+        });
+      }
+
+      const upvotesData = upvotesRes.data ?? [];
+      const commentsData = commentsRes.data ?? [];
+
+      const idsToFetch: { id: string; type: 'product' | 'profile' }[] = [];
+      upvotesData.forEach((u: any) => {
+        if (!nameCacheRef.current[u.product_id]) idsToFetch.push({ id: u.product_id, type: 'product' });
+        if (!nameCacheRef.current[u.user_id]) idsToFetch.push({ id: u.user_id, type: 'profile' });
+      });
+      commentsData.forEach((c: any) => {
+        if (!nameCacheRef.current[c.product_id]) idsToFetch.push({ id: c.product_id, type: 'product' });
+        if (!nameCacheRef.current[c.user_id]) idsToFetch.push({ id: c.user_id, type: 'profile' });
+      });
+
+      await Promise.all(
+        idsToFetch.map(item => getName(item.id, item.type))
+      );
+
+      upvotesData.forEach((u: any, idx: number) => {
+        const uName = nameCacheRef.current[u.user_id] || 'Someone';
+        const pName = nameCacheRef.current[u.product_id] || 'a startup';
+        events.push({
+          id: `upvote-${u.user_id}-${u.product_id}-${idx}`,
+          text: `${uName} upvoted ${pName}!`,
+          timestamp: new Date(u.created_at),
+          type: 'upvote'
+        });
+      });
+
+      commentsData.forEach((c: any, idx: number) => {
+        const uName = nameCacheRef.current[c.user_id] || 'Someone';
+        const pName = nameCacheRef.current[c.product_id] || 'a startup';
+        events.push({
+          id: `comment-${c.user_id}-${c.product_id}-${idx}`,
+          text: `${uName} commented on ${pName}`,
+          timestamp: new Date(c.created_at),
+          type: 'comment'
+        });
+      });
+
+      events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      setActivityEvents(events.slice(0, 15));
+    } catch (err) {
+      console.error('Error fetching recent activities:', err);
+    }
+  }, [getName]);
+
+  // Initial load
   useEffect(() => {
     void fetchLeaderboard(activeTab);
   }, [activeTab, fetchLeaderboard]);
 
-  const top3 = entries.slice(0, 3);
-  const rest = entries.slice(3);
+  // Supabase WebSocket / Realtime setup
+  useEffect(() => {
+    void fetchRecentActivities();
+
+    const channel = supabase.channel('leaderboard-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'upvotes' },
+        (payload) => {
+          handleRealtimeEvent('upvote', payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'comments' },
+        (payload) => {
+          handleRealtimeEvent('comment', payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'follows' },
+        (payload) => {
+          handleRealtimeEvent('follow', payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        (payload) => {
+          handleRealtimeEvent('product', payload);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchRecentActivities, handleRealtimeEvent]);
+
+  // Memoized lists to prevent excessive re-renders
+  const top3 = useMemo(() => entries.slice(0, 3), [entries]);
+  const rest = useMemo(() => entries.slice(3), [entries]);
 
   // 🔥 Rising Stars Section Logic
   // Filter startups with rank improvement in last 24h, and at least 5 upvotes OR 3 comments.
@@ -472,13 +903,15 @@ export function LeaderboardPage() {
     return entries
       .map((entry) => {
         const previousRank = entry.prev_rank || entry.rank;
-        const rankChange = previousRank - entry.rank; // Positive is improvement
+        const rankChange = previousRank - entry.rank;
         return { ...entry, rankChange };
       })
       .filter((entry) => entry.rankChange > 0 && (entry.upvote_count >= 5 || entry.comment_count >= 3))
       .sort((a, b) => b.rankChange - a.rankChange)
       .slice(0, 5);
   }, [entries]);
+
+  const isSeasonalTab = activeTab === 'season_week' || activeTab === 'season_month';
 
   return (
     <div className="w-full max-w-none min-w-0 pb-16 space-y-8">
@@ -495,7 +928,11 @@ export function LeaderboardPage() {
               Real-time rankings based on community upvotes, engagement, and growth. Updated live from the database.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <div className="flex items-center gap-3 text-xs text-zinc-400">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+              Live Updating
+            </div>
             <span>Updated {lastRefresh.toLocaleTimeString()}</span>
             <button
               onClick={() => void fetchLeaderboard(activeTab)}
@@ -536,145 +973,157 @@ export function LeaderboardPage() {
         })}
       </div>
 
-      {/* ── Content ──────────────────────────────────────────────── */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.15 }}
-        >
-          {loading ? (
-            <div className="space-y-3">
-              {[...Array(8)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-20 rounded-xl bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 animate-pulse"
-                />
-              ))}
-            </div>
-          ) : entries.length === 0 ? (
-            <div className="text-center py-20 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-              <Trophy className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
-              <p className="font-bold text-zinc-600 dark:text-zinc-400 text-sm mb-1">
-                No startups in this category yet
-              </p>
-              <p className="text-zinc-400 text-xs">
-                Be the first to launch a startup here!
-              </p>
-              <Link
-                to="/launch"
-                className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-colors"
-              >
-                Launch Now <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-6">
-
-              {/* ── Podium (Top 3) ──── */}
-              {top3.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* 2nd place */}
-                  {top3[1] && (
-                    <PodiumCard entry={top3[1]} podiumPos={2} />
-                  )}
-                  {/* 1st place — center and elevated */}
-                  <PodiumCard entry={top3[0]} podiumPos={1} />
-                  {/* 3rd place */}
-                  {top3[2] && (
-                    <PodiumCard entry={top3[2]} podiumPos={3} />
-                  )}
+      {/* ── 2-Column Responsive Layout ───────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+        
+        {/* Left column: Leaderboard content or Battle Arena */}
+        <div className="lg:col-span-3 space-y-6">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.15 }}
+            >
+              {activeTab === 'battle' ? (
+                <StartupBattle startups={entries} />
+              ) : loading ? (
+                <div className="space-y-3">
+                  {[...Array(8)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-20 rounded-xl bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 animate-pulse"
+                    />
+                  ))}
                 </div>
-              )}
+              ) : entries.length === 0 ? (
+                <div className="text-center py-20 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                  <Trophy className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
+                  <p className="font-bold text-zinc-600 dark:text-zinc-400 text-sm mb-1">
+                    No startups in this category yet
+                  </p>
+                  <p className="text-zinc-400 text-xs">
+                    Be the first to launch a startup here!
+                  </p>
+                  <Link
+                    to="/launch"
+                    className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Launch Now <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* ── Podium (Top 3) ──── */}
+                  {top3.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* 2nd place */}
+                      {top3[1] && (
+                        <PodiumCard entry={top3[1]} podiumPos={2} isSeasonal={isSeasonalTab} />
+                      )}
+                      {/* 1st place — center and elevated */}
+                      <PodiumCard entry={top3[0]} podiumPos={1} isSeasonal={isSeasonalTab} />
+                      {/* 3rd place */}
+                      {top3[2] && (
+                        <PodiumCard entry={top3[2]} podiumPos={3} isSeasonal={isSeasonalTab} />
+                      )}
+                    </div>
+                  )}
 
-              {/* ── Rising Stars Section ──── */}
-              {risingStars.length > 0 && (
-                <div className="bg-gradient-to-r from-orange-500/10 via-red-500/5 to-transparent border border-orange-500/20 rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Flame className="w-5 h-5 text-orange-500 animate-pulse" />
-                    <h3 className="font-extrabold text-sm sm:text-base text-zinc-900 dark:text-white uppercase tracking-wider">
-                      🔥 Rising Stars
-                    </h3>
-                    <span className="text-xs text-zinc-500 font-medium">
-                      Fastest growing startups in last 24h
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-                    {risingStars.map((star) => (
-                      <div
-                        key={star.id}
-                        className="bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800/80 p-3 rounded-xl flex items-center gap-3 hover:border-orange-500/30 transition-all duration-200"
-                      >
-                        <Link to={`/product/${star.id}`} className="flex-shrink-0">
-                          <div className="w-8 h-8 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
-                            {star.logo_url ? (
-                              <img src={star.logo_url} alt={star.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-black text-xs">
-                                {star.name[0]}
-                              </div>
-                            )}
-                          </div>
-                        </Link>
-                        <div className="min-w-0 flex-1">
-                          <Link
-                            to={`/product/${star.id}`}
-                            className="font-bold text-xs text-zinc-900 dark:text-white truncate block hover:text-orange-500"
-                          >
-                            {star.name}
-                          </Link>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] font-bold text-emerald-500 flex items-center">
-                              <ArrowUp className="w-2.5 h-2.5 mr-0.5" />
-                              +{star.rankChange}
-                            </span>
-                            <span className="text-[9px] text-zinc-400 font-medium">
-                              Score: {star.score}
-                            </span>
-                          </div>
-                        </div>
+                  {/* ── Rising Stars Section ──── */}
+                  {risingStars.length > 0 && (
+                    <div className="bg-gradient-to-r from-orange-500/10 via-red-500/5 to-transparent border border-orange-500/20 rounded-2xl p-5 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-5 h-5 text-orange-500 animate-pulse" />
+                        <h3 className="font-extrabold text-sm sm:text-base text-zinc-900 dark:text-white uppercase tracking-wider">
+                          🔥 Rising Stars
+                        </h3>
+                        <span className="text-xs text-zinc-500 font-medium">
+                          Fastest growing startups in last 24h
+                        </span>
                       </div>
-                    ))}
-                  </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                        {risingStars.map((star) => (
+                          <div
+                            key={star.id}
+                            className="bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800/80 p-3 rounded-xl flex items-center gap-3 hover:border-orange-500/30 transition-all duration-200"
+                          >
+                            <Link to={`/product/${star.id}`} className="flex-shrink-0">
+                              <div className="w-8 h-8 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                                {star.logo_url ? (
+                                  <img src={star.logo_url} alt={star.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-black text-xs">
+                                    {star.name[0]}
+                                  </div>
+                                )}
+                              </div>
+                            </Link>
+                            <div className="min-w-0 flex-1">
+                              <Link
+                                  to={`/product/${star.id}`}
+                                  className="font-bold text-xs text-zinc-900 dark:text-white truncate block hover:text-orange-500"
+                              >
+                                {star.name}
+                              </Link>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[10px] font-bold text-emerald-500 flex items-center">
+                                  <ArrowUp className="w-2.5 h-2.5 mr-0.5" />
+                                  +{star.rankChange}
+                                </span>
+                                <span className="text-[9px] text-zinc-400 font-medium">
+                                  Score: {star.score}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Full Table ──────── */}
+                  {rest.length > 0 && (
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                      {/* Table header */}
+                      <div className="grid grid-cols-[2rem_1fr_auto] sm:grid-cols-[2.5rem_1fr_6rem_6rem_6rem_6rem_7rem] gap-3 px-5 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                        <span className="text-center">#</span>
+                        <span>Startup</span>
+                        <span className="hidden sm:block text-center">Upvotes</span>
+                        <span className="hidden sm:block text-center">Comments</span>
+                        <span className="hidden sm:block text-center">Followers</span>
+                        <span className="hidden sm:block text-right">Score</span>
+                        <span className="text-right">Move</span>
+                      </div>
+
+                      {/* Rows */}
+                      <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                        {rest.map((entry) => (
+                          <LeaderboardRow key={entry.id} entry={entry} isSeasonal={isSeasonalTab} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
-              {/* ── Full Table ──────── */}
-              {rest.length > 0 && (
-                <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                  {/* Table header */}
-                  <div className="grid grid-cols-[2rem_1fr_auto] sm:grid-cols-[2.5rem_1fr_6rem_6rem_6rem_6rem_7rem] gap-3 px-5 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                    <span className="text-center">#</span>
-                    <span>Startup</span>
-                    <span className="hidden sm:block text-center">Upvotes</span>
-                    <span className="hidden sm:block text-center">Comments</span>
-                    <span className="hidden sm:block text-center">Followers</span>
-                    <span className="hidden sm:block text-right">Score</span>
-                    <span className="text-right">Move</span>
-                  </div>
-
-                  {/* Rows */}
-                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                    {rest.map((entry) => (
-                      <LeaderboardRow key={entry.id} entry={entry} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </motion.div>
-      </AnimatePresence>
+        {/* Right column: Sticky Activity Feed Sidebar Widget */}
+        <div className="lg:col-span-1 lg:sticky lg:top-24">
+          <ActivityFeedWidget events={activityEvents} />
+        </div>
+      </div>
     </div>
   );
 }
 
 // ─── Podium Card ─────────────────────────────────────────────────────────────
 
-function PodiumCard({ entry, podiumPos }: { entry: LeaderboardEntry; podiumPos: 1 | 2 | 3 }) {
+function PodiumCard({ entry, podiumPos, isSeasonal }: { entry: LeaderboardEntry; podiumPos: 1 | 2 | 3; isSeasonal?: boolean }) {
   const isFirst = podiumPos === 1;
   return (
     <motion.div
@@ -720,7 +1169,9 @@ function PodiumCard({ entry, podiumPos }: { entry: LeaderboardEntry; podiumPos: 
         </Link>
       )}
 
-      <BadgeChips badges={entry.badges} />
+      <div className="mt-1.5">
+        <BadgeChips badges={entry.badges} isSeasonal={isSeasonal} />
+      </div>
 
       <div className="mt-3 w-full pt-3 border-t border-zinc-100 dark:border-zinc-800 grid grid-cols-3 gap-2">
         <div className="text-center">
@@ -742,7 +1193,7 @@ function PodiumCard({ entry, podiumPos }: { entry: LeaderboardEntry; podiumPos: 
 
 // ─── Leaderboard Table Row ───────────────────────────────────────────────────
 
-function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
+function LeaderboardRow({ entry, isSeasonal }: { entry: LeaderboardEntry; isSeasonal?: boolean }) {
   const rankImproved = entry.prev_rank !== undefined && entry.rank < entry.prev_rank;
 
   return (
@@ -809,7 +1260,7 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
                 <span className="truncate max-w-[120px]">{entry.founder_name}</span>
               </Link>
             )}
-            <BadgeChips badges={entry.badges.slice(0, 1)} />
+            <BadgeChips badges={entry.badges.slice(0, 1)} isSeasonal={isSeasonal} />
           </div>
         </div>
       </div>
@@ -839,6 +1290,107 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
       </div>
     </motion.div>
   );
+}
+
+// ─── Activity Feed Widget Sidebar ──────────────────────────────────────────
+
+function ActivityFeedWidget({ events }: { events: ActivityEvent[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col h-[580px] lg:h-[650px] w-full">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-rose-500 to-indigo-500" />
+      
+      <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Activity className="w-5 h-5 text-orange-500 animate-pulse" />
+          <h3 className="font-extrabold text-sm sm:text-base text-zinc-900 dark:text-white uppercase tracking-wider">
+            Live Activity
+          </h3>
+        </div>
+        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-[10px] font-bold text-emerald-500 border border-emerald-500/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+          LIVE
+        </div>
+      </div>
+
+      <div 
+        ref={containerRef}
+        className="flex-1 overflow-y-auto mt-4 space-y-3 pr-1 hide-scrollbar scroll-smooth"
+      >
+        <AnimatePresence initial={false}>
+          {events.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-650 py-10">
+              <Activity className="w-8 h-8 mb-2 opacity-40 animate-pulse" />
+              <span className="text-xs">Listening for events...</span>
+            </div>
+          ) : (
+            events.map((event) => {
+              let Icon = Activity;
+              let iconColor = 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400';
+              let badgeBorder = 'border-zinc-250';
+              
+              if (event.type === 'upvote') {
+                Icon = ThumbsUp;
+                iconColor = 'bg-orange-500/10 text-orange-500';
+                badgeBorder = 'border-orange-500/20';
+              } else if (event.type === 'comment') {
+                Icon = MessageSquare;
+                iconColor = 'bg-sky-500/10 text-sky-500';
+                badgeBorder = 'border-sky-500/20';
+              } else if (event.type === 'follow') {
+                Icon = Users;
+                iconColor = 'bg-emerald-500/10 text-emerald-500';
+                badgeBorder = 'border-emerald-500/20';
+              } else if (event.type === 'rank_shift') {
+                Icon = Trophy;
+                iconColor = 'bg-amber-500/10 text-amber-500';
+                badgeBorder = 'border-amber-500/20';
+              } else if (event.type === 'new_startup') {
+                Icon = Rocket;
+                iconColor = 'bg-indigo-500/10 text-indigo-500';
+                badgeBorder = 'border-indigo-500/20';
+              }
+
+              return (
+                <motion.div
+                  key={event.id}
+                  initial={{ opacity: 0, x: 20, y: -10 }}
+                  animate={{ opacity: 1, x: 0, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  className="flex items-start gap-3 p-3 rounded-xl border bg-zinc-50/50 dark:bg-zinc-950/20 border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 transition-colors"
+                >
+                  <div className={`p-1.5 rounded-lg border ${iconColor} ${badgeBorder} flex-shrink-0`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 leading-tight">
+                      {event.text}
+                    </p>
+                    <span className="text-[9px] text-zinc-400 mt-1 block">
+                      {formatTimeAgo(event.timestamp)}
+                    </span>
+                  </div>
+                </motion.div>
+              );
+            })
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function formatTimeAgo(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return 'Just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return date.toLocaleDateString();
 }
 
 export default LeaderboardPage;
