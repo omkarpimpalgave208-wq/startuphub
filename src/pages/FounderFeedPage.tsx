@@ -27,6 +27,7 @@ export function FounderFeedPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingLikes, setProcessingLikes] = useState<Set<string>>(new Set());
 
   // Revoke object URL on unmount to prevent memory leaks
   useEffect(() => {
@@ -63,6 +64,19 @@ export function FounderFeedPage() {
 
       if (fetchErr) throw fetchErr;
 
+      // Fetch user's likes if authenticated
+      let likedIds = new Set<string>();
+      if (user?.id) {
+        const { data: likesData, error: likesErr } = await supabase
+          .from('discussion_upvotes')
+          .select('discussion_id')
+          .eq('user_id', user.id);
+        
+        if (!likesErr && likesData) {
+          likedIds = new Set(likesData.map(l => l.discussion_id));
+        }
+      }
+
       const mapped = (data ?? []).map((item: any) => {
         let postText = '';
         let postImage = undefined;
@@ -83,6 +97,7 @@ export function FounderFeedPage() {
           imageUrl: postImage,
           timestamp: item.created_at,
           likes: item.upvote_count ?? 0,
+          hasLiked: likedIds.has(item.id),
         };
       });
 
@@ -93,7 +108,7 @@ export function FounderFeedPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     void fetchPosts();
@@ -188,18 +203,97 @@ export function FounderFeedPage() {
   };
 
   const handleLikePost = async (postId: string) => {
+    if (!user) {
+      alert('Please sign in to like posts.');
+      return;
+    }
+
+    if (processingLikes.has(postId)) {
+      return; // Prevent rapid spam clicking
+    }
+
+    // Set processing state
+    setProcessingLikes(prev => {
+      const next = new Set(prev);
+      next.add(postId);
+      return next;
+    });
+
+    const post = posts.find(p => p.id === postId);
+    if (!post) {
+      setProcessingLikes(prev => {
+        const next = new Set(prev);
+        next.delete(postId);
+        return next;
+      });
+      return;
+    }
+
+    const wasLiked = !!post.hasLiked;
+    
     // Optimistic UI updates
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        return { ...post, likes: post.likes + 1 };
+    setPosts(prev => prev.map(p => {
+      if (p.id === postId) {
+        return {
+          ...p,
+          hasLiked: !wasLiked,
+          likes: wasLiked ? Math.max(0, p.likes - 1) : p.likes + 1
+        };
       }
-      return post;
+      return p;
     }));
 
     try {
-      await supabase.rpc('increment_discussion_upvote_count', { discussion_id: postId });
-    } catch (err) {
-      console.error('Error incrementing likes:', err);
+      if (wasLiked) {
+        // Unlike: delete upvote from table & decrement upvote count on discussion
+        const { error: deleteErr } = await supabase
+          .from('discussion_upvotes')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('discussion_id', postId);
+
+        if (deleteErr) throw deleteErr;
+
+        const { error: rpcErr } = await supabase.rpc('decrement_discussion_upvote_count', { discussion_id: postId });
+        if (rpcErr) throw rpcErr;
+      } else {
+        // Like: insert upvote into table & increment upvote count on discussion
+        const { error: insertErr } = await supabase
+          .from('discussion_upvotes')
+          .insert({
+            user_id: user.id,
+            discussion_id: postId
+          });
+
+        if (insertErr) {
+          if (insertErr.code !== '23505') {
+            throw insertErr;
+          }
+        }
+
+        const { error: rpcErr } = await supabase.rpc('increment_discussion_upvote_count', { discussion_id: postId });
+        if (rpcErr) throw rpcErr;
+      }
+    } catch (err: any) {
+      console.error('Error handling like/unlike:', err);
+      // Revert optimistic update
+      setPosts(prev => prev.map(p => {
+        if (p.id === postId) {
+          return {
+            ...p,
+            hasLiked: wasLiked,
+            likes: wasLiked ? p.likes : Math.max(0, p.likes - 1)
+          };
+        }
+        return p;
+      }));
+      alert('Failed to update like status. Please try again.');
+    } finally {
+      setProcessingLikes(prev => {
+        const next = new Set(prev);
+        next.delete(postId);
+        return next;
+      });
     }
   };
 
@@ -412,9 +506,14 @@ export function FounderFeedPage() {
               <div className="flex items-center pt-3 border-t border-zinc-100 dark:border-zinc-850">
                 <button
                   onClick={() => handleLikePost(post.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400 transition-colors text-xs font-bold"
+                  disabled={processingLikes.has(post.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold ${
+                    post.hasLiked 
+                      ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-500 dark:text-rose-400' 
+                      : 'hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400'
+                  } ${processingLikes.has(post.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <ThumbsUp className="w-4 h-4" />
+                  <ThumbsUp className={`w-4 h-4 ${post.hasLiked ? 'fill-current' : ''}`} />
                   <span>{post.likes}</span>
                 </button>
               </div>
