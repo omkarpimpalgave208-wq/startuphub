@@ -88,29 +88,32 @@ export function FirstStartupBadge({ startupName, founderName, earnedDate, imageU
           <img 
             src="/badge-template.png" 
             alt="First Startup Badge Template" 
-            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            className="absolute inset-y-0 left-0 h-full object-contain object-left pointer-events-none"
             crossOrigin="anonymous"
           />
 
           {/* Dynamic Text Overlay */}
-          <div className="absolute inset-0 flex flex-col justify-end pb-8">
-            <div className="w-full text-center px-6 space-y-4">
-              <div>
-                <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Startup</p>
-                <p className="text-xl text-white font-black line-clamp-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{startupName}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Founder</p>
-                <p className="text-base text-zinc-200 font-bold line-clamp-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{founderName}</p>
-              </div>
-              
-              {/* Decorative Divider */}
-              <div className="w-1/2 mx-auto h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent my-2"></div>
-
-              <div>
-                <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-[0.2em] mb-1 drop-shadow-md">Earned Date</p>
-                <p className="text-xs text-amber-400/90 font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{earnedDate}</p>
-              </div>
+          <div className="absolute inset-0">
+            {/* Startup Value: Y = 138 to 148 (62.4% to 67.0% of height), X = 152 (38.7% of width) */}
+            <div 
+              className="absolute left-[38.7%] flex items-center text-left" 
+              style={{ top: '62.4%', height: '4.8%', width: '56.1%' }}
+            >
+              <p className="text-[11px] sm:text-[13px] text-yellow-400 font-extrabold line-clamp-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] break-words leading-none">{startupName}</p>
+            </div>
+            {/* Founder Value: Y = 160 to 184 (72.4% to 83.3% of height), X = 152 (38.7% of width) */}
+            <div 
+              className="absolute left-[38.7%] flex items-center text-left" 
+              style={{ top: '72.4%', height: '11.0%', width: '56.1%' }}
+            >
+              <p className="text-[11px] sm:text-[13px] text-yellow-400 font-extrabold line-clamp-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] break-words leading-tight">{founderName}</p>
+            </div>
+            {/* Date Value: Y = 195 to 215 (88.2% to 97.3% of height), X = 180 (45.8% of width) */}
+            <div 
+              className="absolute left-[45.8%] flex items-center text-left" 
+              style={{ top: '88.2%', height: '9.0%', width: '49.0%' }}
+            >
+              <p className="text-[10px] text-zinc-300 font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] leading-none">{earnedDate}</p>
             </div>
           </div>
         </div>

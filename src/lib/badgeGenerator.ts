@@ -31,11 +31,6 @@ export async function generateBadgeImage(
       // Draw the original template on the left side
       ctx.drawImage(img, 0, 0, drawWidth, canvasHeight);
       
-      // The background color of the badge is #050505.
-      // We erase the old baked-in text values, but extend the erasure all the way to the right
-      // edge of our massive new 1200px canvas to give us a huge text area!
-      ctx.fillStyle = '#050505'; 
-      
       // Erase main text area (Startup & Founder) without touching the labels
       ctx.fillRect(194 * scale, 100 * scale, canvasWidth - (194 * scale), 80 * scale); 
       // Erase the date text area
@@ -86,6 +81,32 @@ export async function generateBadgeImage(
           fontSize -= 2;
         }
         
+        // Handle case where text is extremely long even at minimum font size
+        ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px sans-serif`;
+        lineHeight = fontSize * 1.2;
+        const maxLines = Math.floor(maxHeight / lineHeight);
+        
+        if (lines.length > maxLines) {
+          lines = lines.slice(0, maxLines);
+          if (lines.length > 0) {
+            let lastLine = lines[lines.length - 1];
+            while (lastLine.length > 0 && ctx.measureText(lastLine + '...').width > maxWidth) {
+              lastLine = lastLine.slice(0, -1);
+            }
+            lines[lines.length - 1] = lastLine.trim() + '...';
+          }
+        }
+        
+        for (let i = 0; i < lines.length; i++) {
+          if (ctx.measureText(lines[i]).width > maxWidth) {
+            let line = lines[i];
+            while (line.length > 0 && ctx.measureText(line + '...').width > maxWidth) {
+              line = line.slice(0, -1);
+            }
+            lines[i] = line.trim() + '...';
+          }
+        }
+        
         ctx.fillStyle = fontColor;
         // Vertically center within the available maxHeight
         const totalTextHeight = lines.length * lineHeight;
@@ -97,16 +118,16 @@ export async function generateBadgeImage(
       };
 
       // Draw the new multi-line, dynamically scaled text
-      const maxTextWidth = canvasWidth - (195 * scale) - 40; // ~565px wide
+      const maxTextWidth = canvasWidth - (152 * scale) - 40; // ~695px wide
       
-      // Startup: x=195 (unscaled), y=110 to 145
-      drawDynamicText(startupName, 195 * scale, 110 * scale, maxTextWidth, 35 * scale, 42, '#facc15', true);
+      // Startup Value: Place below the "Startup:" label (Y = 138 to 148)
+      drawDynamicText(startupName, 152 * scale, 138 * scale, maxTextWidth, 10 * scale, 24, '#facc15', true);
       
-      // Founder: x=195 (unscaled), y=148 to 180
-      drawDynamicText(founderName, 195 * scale, 148 * scale, maxTextWidth, 32 * scale, 42, '#facc15', true);
+      // Founder Value: Place below the "Founder:" label (Y = 160 to 184)
+      drawDynamicText(founderName, 152 * scale, 160 * scale, maxTextWidth, 24 * scale, 24, '#facc15', true);
       
-      // Date: x=180 (unscaled), y=185 to 205
-      drawDynamicText(earnedDate, 180 * scale, 185 * scale, maxTextWidth + (15 * scale), 20 * scale, 28, '#d4d4d8', false);
+      // Date Value: Place next to the calendar icon (Y = 195 to 215, X = 180)
+      drawDynamicText(earnedDate, 180 * scale, 195 * scale, canvasWidth - (180 * scale) - 40, 20 * scale, 20, '#d4d4d8', false);
 
       canvas.toBlob((blob) => {
         if (!blob) {

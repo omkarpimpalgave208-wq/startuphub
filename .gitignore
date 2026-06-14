@@ -27,3 +27,7 @@ dist-ssr
 
 .vercel
 .env*
+
+# Scratch and test files
+scratch/
+test-badge.js

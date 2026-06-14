@@ -85,10 +85,10 @@ CREATE POLICY "authenticated_create_connections" ON connections
   TO authenticated
   WITH CHECK (auth.uid() = user_one_id OR auth.uid() = user_two_id);
 
+DROP POLICY IF EXISTS "allow_users_to_read_their_connections" ON connections;
 CREATE POLICY "allow_users_to_read_their_connections" ON connections
   FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_one_id OR auth.uid() = user_two_id);
+  USING (true);
 
 CREATE POLICY "allow_users_to_delete_their_connections" ON connections
   FOR DELETE
