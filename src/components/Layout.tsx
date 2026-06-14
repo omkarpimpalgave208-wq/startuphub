@@ -9,6 +9,8 @@ import { useLastSeen } from '../hooks/useLastSeen';
 import { api } from '../lib/api';
 import { requestNotificationPermission, registerPushNotificationsServiceWorker, showLocalNotification } from '../utils/notifications';
 import { ToastContainer } from './ui/Toast';
+import { InstallBanner } from './InstallBanner';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export function Layout() {
   const { darkMode, sidebarOpen, setSidebarOpen, setSearchOpen } = useUIStore();
@@ -132,6 +134,7 @@ export function Layout() {
   return (
     <div className="min-h-dvh bg-background text-foreground w-full max-w-[100vw] overflow-x-hidden">
       <ToastContainer />
+      <PWAInstallButton />
       {/* Fixed Navbar */}
       <div className="fixed top-0 left-0 right-0 z-50">
         <Navbar />
@@ -161,6 +164,7 @@ export function Layout() {
       <main className={`relative min-h-dvh pt-12 sm:pt-14 pb-16 lg:pb-0 w-full min-w-0 overflow-x-hidden ${
         location.pathname.startsWith('/profile/') ? 'lg:pl-0' : 'lg:pl-[260px]'
       }`}>
+        <InstallBanner />
         {location.pathname.startsWith('/profile/') ? (
           <Suspense fallback={
             <div className="flex items-center justify-center py-20 w-full min-h-[50vh]">
