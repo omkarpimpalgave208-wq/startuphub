@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Rss, ThumbsUp, Send, Image, MessageSquare, Heart, Clock } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Rss, ThumbsUp, Send, Image, Clock, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
+import { supabase } from '../lib/supabase';
 
 export interface FeedPost {
   id: string;
@@ -14,92 +15,126 @@ export interface FeedPost {
   likes: number;
 }
 
-const DEFAULT_POSTS: FeedPost[] = [
-  {
-    id: 'post-1',
-    userName: 'Omkar Pimpalgave',
-    userAvatar: null,
-    content: 'Just launched StartupHub! Check out the leaderboard and let me know your feedback. 🚀',
-    imageUrl: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=800&q=80',
-    timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
-    likes: 12,
-  },
-  {
-    id: 'post-2',
-    userName: 'Jane Doe',
-    userAvatar: null,
-    content: 'Building in public is the best way to get early validation. What features are you shipping today?',
-    timestamp: new Date(Date.now() - 3600000 * 8).toISOString(),
-    likes: 8,
-  }
-];
-
 export function FounderFeedPage() {
   const { user, profile } = useAuthStore();
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [newPostImageUrl, setNewPostImageUrl] = useState('');
   const [showImageInput, setShowImageInput] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load posts from localStorage on mount
-  useEffect(() => {
+  // Fetch real posts from Supabase
+  const fetchPosts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const stored = localStorage.getItem('sh_founder_feed_posts');
-      if (stored) {
-        setPosts(JSON.parse(stored));
-      } else {
-        setPosts(DEFAULT_POSTS);
-        localStorage.setItem('sh_founder_feed_posts', JSON.stringify(DEFAULT_POSTS));
-      }
-    } catch {
-      setPosts(DEFAULT_POSTS);
+      const { data, error: fetchErr } = await supabase
+        .from('discussions')
+        .select(`
+          id,
+          user_id,
+          title,
+          content,
+          category,
+          upvote_count,
+          created_at,
+          profiles:user_id (
+            full_name,
+            username,
+            avatar_url
+          )
+        `)
+        .eq('category', 'FounderFeed')
+        .order('created_at', { ascending: false });
+
+      if (fetchErr) throw fetchErr;
+
+      const mapped = (data ?? []).map((item: any) => {
+        let postText = '';
+        let postImage = undefined;
+        try {
+          const parsed = JSON.parse(item.content);
+          postText = parsed.text || item.content;
+          postImage = parsed.imageUrl;
+        } catch {
+          postText = item.content;
+        }
+
+        return {
+          id: item.id,
+          userName: item.profiles?.full_name || item.profiles?.username || 'Anonymous Founder',
+          userAvatar: item.profiles?.avatar_url || null,
+          content: postText,
+          imageUrl: postImage,
+          timestamp: item.created_at,
+          likes: item.upvote_count ?? 0,
+        };
+      });
+
+      setPosts(mapped);
+    } catch (err: any) {
+      console.error('Error fetching founder feed:', err);
+      setError('Failed to load feed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // Save posts to localStorage helper
-  const savePosts = (updatedPosts: FeedPost[]) => {
-    setPosts(updatedPosts);
+  useEffect(() => {
+    void fetchPosts();
+  }, [fetchPosts]);
+
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPostContent.trim() || !user) return;
+
+    setSubmitting(true);
     try {
-      localStorage.setItem('sh_founder_feed_posts', JSON.stringify(updatedPosts));
-    } catch (err) {
-      console.error('Error saving posts to local storage:', err);
+      const { error: insertErr } = await supabase
+        .from('discussions')
+        .insert({
+          user_id: user.id,
+          title: 'Founder Feed Post',
+          content: JSON.stringify({
+            text: newPostContent.trim(),
+            imageUrl: newPostImageUrl.trim() || undefined,
+          }),
+          category: 'FounderFeed',
+        });
+
+      if (insertErr) throw insertErr;
+
+      // Clear form inputs
+      setNewPostContent('');
+      setNewPostImageUrl('');
+      setShowImageInput(false);
+
+      // Refetch latest posts to show new post
+      await fetchPosts();
+    } catch (err: any) {
+      console.error('Error creating feed post:', err);
+      alert('Failed to share update. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleCreatePost = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPostContent.trim()) return;
-
-    const displayName = profile?.full_name || profile?.username || user?.email?.split('@')[0] || 'Anonymous Founder';
-    const avatarUrl = profile?.avatar_url || null;
-
-    const newPost: FeedPost = {
-      id: Math.random().toString(36).substring(2) + Date.now().toString(36),
-      userName: displayName,
-      userAvatar: avatarUrl,
-      content: newPostContent.trim(),
-      imageUrl: newPostImageUrl.trim() || undefined,
-      timestamp: new Date().toISOString(),
-      likes: 0,
-    };
-
-    const updated = [newPost, ...posts];
-    savePosts(updated);
-
-    // Reset inputs
-    setNewPostContent('');
-    setNewPostImageUrl('');
-    setShowImageInput(false);
-  };
-
-  const handleLikePost = (postId: string) => {
-    const updated = posts.map(post => {
+  const handleLikePost = async (postId: string) => {
+    // Optimistic UI updates
+    setPosts(prev => prev.map(post => {
       if (post.id === postId) {
         return { ...post, likes: post.likes + 1 };
       }
       return post;
-    });
-    savePosts(updated);
+    }));
+
+    try {
+      await supabase.rpc('increment_discussion_upvote_count', { discussion_id: postId });
+    } catch (err) {
+      console.error('Error incrementing likes:', err);
+    }
   };
 
   const formatTimeAgo = (dateStr: string) => {
@@ -128,74 +163,97 @@ export function FounderFeedPage() {
           </h1>
         </div>
         <p className="text-white/90 text-sm sm:text-base max-w-xl">
-          A dedicated space for builders to share progress, milestones, and quick thoughts with the community.
+          Real updates from real builders. Share your progress, milestones, and questions with other founders.
         </p>
       </div>
 
       {/* Creation form */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 mb-6 shadow-sm">
-        <form onSubmit={handleCreatePost} className="space-y-4">
-          <div className="flex gap-3 items-start">
-            <Avatar 
-              src={profile?.avatar_url} 
-              alt={profile?.full_name || profile?.username}
-              size="sm"
-            />
-            <div className="flex-1">
-              <textarea
-                value={newPostContent}
-                onChange={(e) => setNewPostContent(e.target.value)}
-                placeholder="What are you working on today?"
-                rows={3}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-orange-500 resize-none"
-                required
+      {user ? (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 mb-6 shadow-sm">
+          <form onSubmit={handleCreatePost} className="space-y-4">
+            <div className="flex gap-3 items-start">
+              <Avatar 
+                src={profile?.avatar_url} 
+                alt={profile?.full_name || profile?.username}
+                size="sm"
               />
+              <div className="flex-1">
+                <textarea
+                  value={newPostContent}
+                  onChange={(e) => setNewPostContent(e.target.value)}
+                  placeholder="What are you working on today?"
+                  rows={3}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-orange-500 resize-none"
+                  required
+                  disabled={submitting}
+                />
+              </div>
             </div>
-          </div>
 
-          {showImageInput && (
-            <div className="flex gap-2 items-center pl-11">
-              <Image className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-              <input
-                type="url"
-                value={newPostImageUrl}
-                onChange={(e) => setNewPostImageUrl(e.target.value)}
-                placeholder="Optional image URL (e.g. https://example.com/screenshot.jpg)"
-                className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-              />
+            {showImageInput && (
+              <div className="flex gap-2 items-center pl-11">
+                <Image className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                <input
+                  type="url"
+                  value={newPostImageUrl}
+                  onChange={(e) => setNewPostImageUrl(e.target.value)}
+                  placeholder="Optional image URL (e.g. https://example.com/screenshot.jpg)"
+                  className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  disabled={submitting}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pl-11 pt-2 border-t border-zinc-150 dark:border-zinc-850">
+              <button
+                type="button"
+                onClick={() => setShowImageInput(!showImageInput)}
+                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                disabled={submitting}
+              >
+                <Image className="w-4 h-4" />
+                {showImageInput ? 'Hide image link' : 'Add image link'}
+              </button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                disabled={!newPostContent.trim() || submitting}
+                className="flex items-center gap-1.5"
+              >
+                {submitting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                Post
+              </Button>
             </div>
-          )}
-
-          <div className="flex items-center justify-between pl-11 pt-2 border-t border-zinc-150 dark:border-zinc-850">
-            <button
-              type="button"
-              onClick={() => setShowImageInput(!showImageInput)}
-              className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-            >
-              <Image className="w-4 h-4" />
-              {showImageInput ? 'Hide image link' : 'Add image link'}
-            </button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              disabled={!newPostContent.trim()}
-              className="flex items-center gap-1.5"
-            >
-              <Send className="w-3.5 h-3.5" />
-              Post
-            </Button>
-          </div>
-        </form>
-      </div>
+          </form>
+        </div>
+      ) : (
+        <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-250 dark:border-zinc-800 rounded-2xl p-5 mb-6 text-center">
+          <p className="text-sm text-zinc-650 dark:text-zinc-400">
+            Please <a href="/login" className="text-orange-500 hover:underline font-bold">sign in</a> to share your founder updates.
+          </p>
+        </div>
+      )}
 
       {/* Feed list */}
       <div className="space-y-4">
-        {posts.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-rose-500 text-sm font-semibold">
+            {error}
+          </div>
+        ) : posts.length === 0 ? (
           <div className="text-center py-16 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-            <Rss className="w-12 h-12 text-zinc-300 mx-auto mb-3 opacity-40 animate-pulse" />
-            <p className="text-zinc-500 font-medium">No posts in the feed yet...</p>
-            <p className="text-xs text-zinc-400 mt-1">Be the first to share an update!</p>
+            <Rss className="w-12 h-12 text-zinc-300 mx-auto mb-3 opacity-40" />
+            <p className="text-zinc-500 font-medium">No posts yet.</p>
+            <p className="text-xs text-zinc-400 mt-1">Be the first founder to share an update.</p>
           </div>
         ) : (
           posts.map((post) => (
@@ -232,7 +290,6 @@ export function FounderFeedPage() {
                     alt="Post attachment" 
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Hide image if URL fails to load
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}
                   />
