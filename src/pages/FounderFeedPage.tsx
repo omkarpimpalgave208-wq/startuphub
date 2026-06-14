@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Rss, ThumbsUp, Send, Image, Clock, Loader2, X } from 'lucide-react';
+import { Rss, ThumbsUp, Send, Image, Clock, Loader2, X, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
@@ -203,6 +203,31 @@ export function FounderFeedPage() {
     }
   };
 
+  const handleDeletePost = async (postId: string) => {
+    if (!user) return;
+    if (!window.confirm('Are you sure you want to delete this post?')) {
+      return;
+    }
+
+    // Instantly remove from UI
+    setPosts(prev => prev.filter(p => p.id !== postId));
+
+    try {
+      const { error: deleteErr } = await supabase
+        .from('discussions')
+        .delete()
+        .eq('id', postId)
+        .eq('user_id', user.id);
+
+      if (deleteErr) throw deleteErr;
+    } catch (err: any) {
+      console.error('Error deleting post:', err);
+      alert('Failed to delete post. Please try again.');
+      // Refetch posts to restore state if deletion failed
+      await fetchPosts();
+    }
+  };
+
   const formatTimeAgo = (dateStr: string) => {
     try {
       const diff = Date.now() - new Date(dateStr).getTime();
@@ -353,6 +378,15 @@ export function FounderFeedPage() {
                     </span>
                   </div>
                 </div>
+                {user && post.user_id === user.id && (
+                  <button
+                    onClick={() => handleDeletePost(post.id)}
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    title="Delete post"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
 
               {/* Post Content */}
