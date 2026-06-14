@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ interface LeaderboardEntry {
 // query; if they fail we safely fall back to 0.
 
 function computeScore(upvotes: number, comments: number, followers: number): number {
-  return (upvotes * 5) + (comments * 2) + (followers * 3);
+  return ((upvotes ?? 0) * 5) + ((comments ?? 0) * 2) + ((followers ?? 0) * 3);
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -108,16 +108,16 @@ export function LeaderboardPage() {
         const ranked: LeaderboardEntry[] = safeProducts
           .filter((p) => p && p.id)
           .map((p) => {
-            const upvotes  = p.upvote_count  ?? 0;
-            const comments = commentMap[p.id]  ?? 0;
-            const followers = followerMap[p.id] ?? 0;
+            const upvotes  = (p.upvote_count ?? 0);
+            const comments = (commentMap[p.id] ?? 0);
+            const followers = (followerMap[p.id] ?? 0);
             return {
               id:    p.id,
               name:  p.name ?? 'Unnamed Startup',
               score: computeScore(upvotes, comments, followers),
             };
           })
-          .sort((a, b) => b.score - a.score)
+          .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
           .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
         setEntries(ranked);
@@ -134,6 +134,24 @@ export function LeaderboardPage() {
     void fetchLeaderboard();
     return () => { cancelled = true; };
   }, []); // mount-only — no realtime subscriptions
+
+  // ── Safe dataset layer using useMemo ──────────────────────────────────────
+  const safeEntries = useMemo(() => {
+    return Array.isArray(entries) ? entries.filter(e => e && e.id) : [];
+  }, [entries]);
+
+  // ── Memoized sorting and calculation blocks ───────────────────────────────
+  const sortedLeaderboard = useMemo(() => {
+    return [...safeEntries].sort((a, b) => (b?.score ?? 0) - (a?.score ?? 0));
+  }, [safeEntries]);
+
+  const top3 = useMemo(() => {
+    return sortedLeaderboard.slice(0, 3);
+  }, [sortedLeaderboard]);
+
+  const risingStars = useMemo(() => {
+    return sortedLeaderboard.slice(3, 10);
+  }, [sortedLeaderboard]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -169,18 +187,18 @@ export function LeaderboardPage() {
       )}
 
       {/* Empty state */}
-      {!loading && !error && entries.length === 0 && (
+      {!loading && !error && safeEntries.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem 0', color: '#9ca3af' }}>
           No startups found yet.
         </div>
       )}
 
       {/* Ranked list */}
-      {!loading && !error && entries.length > 0 && (
+      {!loading && !error && safeEntries.length > 0 && (
         <ol style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {entries.map((entry) => (
+          {safeEntries.map((entry) => (
             <li
-              key={entry.id}
+              key={entry?.id}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -190,7 +208,7 @@ export function LeaderboardPage() {
                 background: '#ffffff',
                 border: '1px solid #e5e7eb',
                 borderRadius: 10,
-                boxShadow: entry.rank <= 3 ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                boxShadow: (entry?.rank ?? 0) <= 3 ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
               }}
             >
               {/* Rank badge */}
@@ -205,14 +223,14 @@ export function LeaderboardPage() {
                 fontSize: '0.8rem',
                 flexShrink: 0,
                 background:
-                  entry.rank === 1 ? '#f59e0b' :
-                  entry.rank === 2 ? '#9ca3af' :
-                  entry.rank === 3 ? '#b45309' :
+                  (entry?.rank ?? 0) === 1 ? '#f59e0b' :
+                  (entry?.rank ?? 0) === 2 ? '#9ca3af' :
+                  (entry?.rank ?? 0) === 3 ? '#b45309' :
                   '#f3f4f6',
                 color:
-                  entry.rank <= 3 ? '#ffffff' : '#374151',
+                  (entry?.rank ?? 0) <= 3 ? '#ffffff' : '#374151',
               }}>
-                {entry.rank}
+                {entry?.rank ?? 0}
               </span>
 
               {/* Name */}
@@ -225,17 +243,17 @@ export function LeaderboardPage() {
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
               }}>
-                {entry.name}
+                {entry?.name ?? 'Unnamed Startup'}
               </span>
 
               {/* Score */}
               <span style={{
                 fontWeight: 700,
                 fontSize: '0.875rem',
-                color: entry.rank <= 3 ? '#f59e0b' : '#6b7280',
+                color: (entry?.rank ?? 0) <= 3 ? '#f59e0b' : '#6b7280',
                 flexShrink: 0,
               }}>
-                {entry.score} pts
+                {entry?.score ?? 0} pts
               </span>
             </li>
           ))}
