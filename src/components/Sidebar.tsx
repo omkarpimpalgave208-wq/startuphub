@@ -11,7 +11,8 @@ import {
   Sparkles,
   Coffee,
   Trophy,
-  BarChart2
+  BarChart2,
+  Rss
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { cn } from '../lib/utils';
@@ -25,6 +26,7 @@ const navItems = [
   { icon: Coffee, label: 'Lounge', href: '/lounge' },
   { icon: Trophy, label: 'Hackathons', href: '/hackathons' },
   { icon: BarChart2, label: 'Leaderboard', href: '/leaderboard' },
+  { icon: Rss, label: 'Founder Feed', href: '/feed' },
 ];
 
 const categories = [

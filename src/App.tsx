@@ -26,6 +26,7 @@ const MessagesPage = lazy(() => import('./pages/MessagesPage').then(module => ({
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(module => ({ default: module.NotFoundPage })));
 const HackathonsPage = lazy(() => import('./pages/HackathonsPage').then(module => ({ default: module.HackathonsPage })));
 import { LeaderboardPage } from './pages/LeaderboardPage';
+import { FounderFeedPage } from './pages/FounderFeedPage';
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
 
 import { supabase } from './lib/supabase';
@@ -48,6 +49,7 @@ function App() {
           <Route path="lounge" element={<LoungePage />} />
           <Route path="hackathons" element={<HackathonsPage />} />
           <Route path="leaderboard" element={<LeaderboardPage />} />
+          <Route path="feed" element={<FounderFeedPage />} />
           
           {/* Category Routes */}
           <Route path="category/:slug" element={<CategoryPage />} />
