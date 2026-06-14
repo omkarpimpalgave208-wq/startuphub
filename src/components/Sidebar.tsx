@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   Home, 
@@ -12,7 +13,8 @@ import {
   Coffee,
   Trophy,
   BarChart2,
-  Rss
+  Rss,
+  Download
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { cn } from '../lib/utils';
@@ -38,6 +40,35 @@ const categories = [
 export function Sidebar() {
   const { setSidebarOpen } = useUIStore();
   const location = useLocation();
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setShowInstallBtn(false);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to install prompt: ${outcome}`);
+    setDeferredPrompt(null);
+    setShowInstallBtn(false);
+  };
 
   const isActiveRoute = (href: string) => {
     if (href === '/') {
@@ -131,6 +162,19 @@ export function Sidebar() {
             </Link>
           </div>
         </div>
+
+        {/* Install CTA */}
+        {showInstallBtn && (
+          <div className="mt-4 px-4 w-full pb-4">
+            <button
+              onClick={handleInstallClick}
+              className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sm font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors text-zinc-800 dark:text-zinc-200 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Install App</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
