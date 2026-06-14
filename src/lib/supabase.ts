@@ -8,9 +8,17 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 console.log('SUPABASE URL:', supabaseUrl);
 console.log('SUPABASE KEY EXISTS:', !!supabaseAnonKey);
 
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("Missing Supabase environment variables");
+}
+
+// Fallback values to prevent SDK from throwing initialization error when env vars are missing
+const fallbackUrl = 'https://placeholder-project.supabase.co';
+const fallbackKey = 'dummy-anon-key';
+
 export const supabase: SupabaseClient<Database> = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
+  supabaseUrl || fallbackUrl,
+  supabaseAnonKey || fallbackKey,
   {
     auth: {
       persistSession: true,
