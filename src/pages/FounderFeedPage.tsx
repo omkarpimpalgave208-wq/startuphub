@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Rss, ThumbsUp, Send, Image, Clock, Loader2 } from 'lucide-react';
+import { Rss, ThumbsUp, Send, Image, Clock, Loader2, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export interface FeedPost {
   id: string;
+  user_id: string;
   userName: string;
   userAvatar: string | null;
   content: string;
@@ -21,9 +23,19 @@ export function FounderFeedPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
-  const [newPostImageUrl, setNewPostImageUrl] = useState('');
-  const [showImageInput, setShowImageInput] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Revoke object URL on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   // Fetch real posts from Supabase
   const fetchPosts = useCallback(async () => {
@@ -64,6 +76,7 @@ export function FounderFeedPage() {
 
         return {
           id: item.id,
+          user_id: item.user_id,
           userName: item.profiles?.full_name || item.profiles?.username || 'Anonymous Founder',
           userAvatar: item.profiles?.avatar_url || null,
           content: postText,
@@ -86,11 +99,61 @@ export function FounderFeedPage() {
     void fetchPosts();
   }, [fetchPosts]);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        alert('Unsupported file type. Please upload a PNG, JPG, WebP, GIF, or SVG image.');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File is too large. Max allowed size is 5MB.');
+        return;
+      }
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+  };
+
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPostContent.trim() || !user) return;
 
     setSubmitting(true);
+    let imageUrl: string | undefined = undefined;
+
+    if (selectedFile) {
+      try {
+        setUploading(true);
+        // Upload image to Supabase Storage
+        imageUrl = await api.uploadFile(selectedFile, 'feed');
+      } catch (uploadErr) {
+        console.warn('Supabase Storage upload failed, falling back to local base64 encoding:', uploadErr);
+        // Base64 fallback if bucket is missing/unconfigured
+        try {
+          imageUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(selectedFile);
+          });
+        } catch (readErr) {
+          console.error('Base64 encoding fallback failed:', readErr);
+        }
+      } finally {
+        setUploading(false);
+      }
+    }
+
     try {
       const { error: insertErr } = await supabase
         .from('discussions')
@@ -99,19 +162,22 @@ export function FounderFeedPage() {
           title: 'Founder Feed Post',
           content: JSON.stringify({
             text: newPostContent.trim(),
-            imageUrl: newPostImageUrl.trim() || undefined,
+            imageUrl,
           }),
           category: 'FounderFeed',
         });
 
       if (insertErr) throw insertErr;
 
-      // Clear form inputs
+      // Reset form
       setNewPostContent('');
-      setNewPostImageUrl('');
-      setShowImageInput(false);
+      setSelectedFile(null);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl(null);
 
-      // Refetch latest posts to show new post
+      // Refetch latest posts
       await fetchPosts();
     } catch (err: any) {
       console.error('Error creating feed post:', err);
@@ -190,30 +256,42 @@ export function FounderFeedPage() {
               </div>
             </div>
 
-            {showImageInput && (
-              <div className="flex gap-2 items-center pl-11">
-                <Image className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                <input
-                  type="url"
-                  value={newPostImageUrl}
-                  onChange={(e) => setNewPostImageUrl(e.target.value)}
-                  placeholder="Optional image URL (e.g. https://example.com/screenshot.jpg)"
-                  className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-                  disabled={submitting}
-                />
+            {/* Selected Image Preview */}
+            {previewUrl && (
+              <div className="relative pl-11 max-w-xs">
+                <div className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center relative aspect-video shadow-sm">
+                  <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="absolute top-1.5 right-1.5 p-1 rounded-full bg-zinc-900/80 text-white hover:bg-zinc-900 transition-colors shadow-sm"
+                    title="Remove Image"
+                    disabled={submitting}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  {uploading && (
+                    <div className="absolute inset-0 bg-white/70 dark:bg-zinc-900/70 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             <div className="flex items-center justify-between pl-11 pt-2 border-t border-zinc-150 dark:border-zinc-850">
-              <button
-                type="button"
-                onClick={() => setShowImageInput(!showImageInput)}
-                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-                disabled={submitting}
-              >
+              <label className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors cursor-pointer">
                 <Image className="w-4 h-4" />
-                {showImageInput ? 'Hide image link' : 'Add image link'}
-              </button>
+                <span>Upload Image</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={submitting}
+                />
+              </label>
+
               <Button
                 type="submit"
                 variant="primary"
