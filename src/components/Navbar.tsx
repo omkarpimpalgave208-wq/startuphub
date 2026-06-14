@@ -25,12 +25,18 @@ import { Avatar } from './ui/Avatar';
 import { Dropdown, DropdownItem, DropdownDivider } from './ui/Dropdown';
 import { SearchModal } from './SearchModal';
 import { NotificationsPanel } from './NotificationsPanel';import { Logo } from './Logo';
+import { useLocalNotificationsStore } from '../store/localNotificationsStore';
+
 export function Navbar() {
   const { user, profile, signOut } = useAuthStore();
   const { isAdmin } = useAdminStore();
   const { darkMode, toggleDarkMode, sidebarOpen, setSidebarOpen, setSearchOpen, searchOpen, notificationsOpen, setNotificationsOpen } = useUIStore();
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [localDropdownOpen, setLocalDropdownOpen] = useState(false);
+  
+  const { notifications: localNotifications, markAllAsRead, clearNotifications } = useLocalNotificationsStore();
+  const localUnreadCount = localNotifications.filter((n) => !n.read).length;
   const navigate = useNavigate();
 
   const refreshUnreadCount = async () => {
@@ -227,6 +233,63 @@ export function Navbar() {
                       </span>
                     )}
                   </button>
+
+                  {/* System Alerts */}
+                  <div className="relative flex flex-shrink-0">
+                    <button
+                      onClick={() => {
+                        setLocalDropdownOpen(!localDropdownOpen);
+                        markAllAsRead();
+                      }}
+                      className="relative p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
+                      aria-label="System Alerts"
+                      title="System Alerts"
+                    >
+                      <Bell className="w-5 h-5 text-amber-500 dark:text-amber-400" />
+                      {localUnreadCount > 0 && (
+                        <span className="absolute top-1 right-1 min-w-[1rem] h-4 rounded-full bg-amber-500 text-[10px] text-white font-semibold flex items-center justify-center px-1.5 animate-pulse">
+                          {localUnreadCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {localDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setLocalDropdownOpen(false)} />
+                        <div className="absolute right-0 mt-8 w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 py-2">
+                          <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-850 flex items-center justify-between">
+                            <span className="font-extrabold text-xs text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                              System Alerts
+                            </span>
+                            <button
+                              onClick={clearNotifications}
+                              className="text-[10px] font-bold text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-200 transition-colors"
+                            >
+                              Clear All
+                            </button>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto divide-y divide-zinc-50 dark:divide-zinc-850/50">
+                            {localNotifications.length === 0 ? (
+                              <div className="px-4 py-6 text-center text-xs text-zinc-400 dark:text-zinc-650">
+                                No alerts yet.
+                              </div>
+                            ) : (
+                              localNotifications.map((n) => (
+                                <div key={n.id} className="px-4 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-950/20 transition-colors">
+                                  <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 leading-snug">
+                                    {n.message}
+                                  </p>
+                                  <span className="text-[9px] text-zinc-450 dark:text-zinc-500 mt-1 block">
+                                    {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
 
                   <button
                     onClick={() => setNotificationsOpen(!notificationsOpen)}

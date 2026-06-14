@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useLocalNotificationsStore } from '../store/localNotificationsStore';
 import {
   Trophy,
   TrendingUp,
@@ -284,6 +285,7 @@ function BadgeChips({ badges, isSeasonal }: { badges: BadgeId[]; isSeasonal?: bo
 
 export function LeaderboardPage() {
   const { user } = useAuthStore();
+  const { addNotification } = useLocalNotificationsStore();
   const [activeTab, setActiveTab] = useState<TabId>('overall');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -298,6 +300,9 @@ export function LeaderboardPage() {
   // Refs for tracking changes and lookup caching
   const nameCacheRef = useRef<Record<string, string>>({});
   const prevRankingsRef = useRef<Record<string, number>>({});
+  const initialUpvotesRef = useRef<Record<string, number>>({});
+  const triggeredUpvoteMilestoneRef = useRef<Record<string, boolean>>({});
+  const triggeredRankShiftRef = useRef<Record<string, number>>({});
   const activeTabRef = useRef<TabId>('overall');
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -654,6 +659,40 @@ export function LeaderboardPage() {
           }
         });
       }
+
+      // ── Lightweight Notification system trigger ──────────────────
+      const currentUser = useAuthStore.getState().user;
+      const { addNotification: triggerNotification } = useLocalNotificationsStore.getState();
+
+      ranked.forEach(e => {
+        const oldRank = prevRankingsRef.current[e.id];
+        const newRank = e.rank;
+
+        // Event 1: When a startup enters Top 10 leaderboard
+        if (newRank <= 10 && oldRank !== undefined && oldRank > 10) {
+          triggerNotification(`🏆 '${e.name}' has entered the Top 10 on the leaderboard!`);
+        }
+
+        // Event 2: When a startup receives 10+ upvotes in a session
+        if (initialUpvotesRef.current[e.id] === undefined) {
+          initialUpvotesRef.current[e.id] = e.upvote_count;
+        } else {
+          const upvoteDiff = e.upvote_count - initialUpvotesRef.current[e.id];
+          if (upvoteDiff >= 10 && !triggeredUpvoteMilestoneRef.current[e.id]) {
+            triggerNotification(`🔥 '${e.name}' has received ${upvoteDiff}+ upvotes in this session!`);
+            triggeredUpvoteMilestoneRef.current[e.id] = true;
+          }
+        }
+
+        // Event 3: When a user’s startup rank improves by 3+ positions
+        if (currentUser && e.user_id === currentUser.id) {
+          const oldUserRank = oldRank !== undefined ? oldRank : e.prev_rank;
+          if (oldUserRank !== undefined && oldUserRank - newRank >= 3 && triggeredRankShiftRef.current[e.id] !== newRank) {
+            triggerNotification(`⚡ Your startup '${e.name}' rank improved by +${oldUserRank - newRank} positions!`);
+            triggeredRankShiftRef.current[e.id] = newRank;
+          }
+        }
+      });
 
       prevRankingsRef.current = currentRanks;
       setEntries(ranked);
