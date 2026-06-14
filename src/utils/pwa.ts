@@ -42,3 +42,9 @@ export function dismissBanner(): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(BANNER_DISMISS_KEY, Date.now().toString());
 }
+
+export function isMobile(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent.toLowerCase();
+  return /mobile|android|iphone|ipad|phone/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}

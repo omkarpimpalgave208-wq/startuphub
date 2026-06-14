@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { cn } from '../lib/utils';
+import { usePWAInstall } from '../hooks/usePWAInstall';
+import { isMobile, isStandalone } from '../utils/pwa';
+import { IOSInstallModal } from './IOSInstallModal';
 
 const navItems = [
   { icon: Home, label: 'Home', href: '/' },
@@ -40,34 +43,30 @@ const categories = [
 export function Sidebar() {
   const { setSidebarOpen } = useUIStore();
   const location = useLocation();
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const { isInstallable, install } = usePWAInstall();
   const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [iosModalOpen, setIosModalOpen] = useState(false);
 
   useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallBtn(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+    if (isStandalone()) {
       setShowInstallBtn(false);
+      return;
     }
 
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
+    if (isInstallable || isMobile()) {
+      setShowInstallBtn(true);
+    }
+  }, [isInstallable]);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to install prompt: ${outcome}`);
-    setDeferredPrompt(null);
-    setShowInstallBtn(false);
+    if (isInstallable) {
+      const success = await install();
+      if (success) {
+        setShowInstallBtn(false);
+      }
+    } else {
+      setIosModalOpen(true);
+    }
   };
 
   const isActiveRoute = (href: string) => {
@@ -176,6 +175,11 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      <IOSInstallModal 
+        isOpen={iosModalOpen}
+        onClose={() => setIosModalOpen(false)}
+      />
     </div>
   );
 }

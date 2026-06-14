@@ -12,6 +12,14 @@
     <link rel="apple-touch-icon" href="/favicon.png" />
     <link rel="manifest" href="/manifest.json" />
     <script>
+      // Capture PWA install prompt event early to prevent React loading race conditions
+      window.addEventListener('beforeinstallprompt', (e) => {
+        console.log('[HTML Debug] Pre-capturing beforeinstallprompt event early');
+        e.preventDefault();
+        window.deferredPrompt = e;
+      });
+    </script>
+    <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
