@@ -84,6 +84,33 @@ const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
 
 // ─── Hackathon Form Defaults ─────────────────────────────────────────────────
 
+const STORAGE_BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET ?? 'products';
+
+const extractStoragePath = (url: string): string | null => {
+  if (!url) return null;
+  const searchStr = `/${STORAGE_BUCKET}/`;
+  const index = url.indexOf(searchStr);
+  if (index !== -1) {
+    return decodeURIComponent(url.substring(index + searchStr.length));
+  }
+  
+  const publicIndex = url.indexOf('/public/');
+  if (publicIndex !== -1) {
+    const rest = url.substring(publicIndex + '/public/'.length);
+    const firstSlash = rest.indexOf('/');
+    if (firstSlash !== -1) {
+      return decodeURIComponent(rest.substring(firstSlash + 1));
+    }
+  }
+
+  const hackathonsIndex = url.indexOf('hackathons/');
+  if (hackathonsIndex !== -1) {
+    return decodeURIComponent(url.substring(hackathonsIndex));
+  }
+
+  return null;
+};
+
 const BLANK_FORM: Omit<Hackathon, 'id' | 'created_at'> = {
   name: '',
   organizer: '',
@@ -171,6 +198,13 @@ export function AdminDashboardPage() {
   const [showHackForm, setShowHackForm] = useState(false);
   const [editingHack, setEditingHack] = useState<Hackathon | null>(null);
   const [hackForm, setHackForm] = useState<Omit<Hackathon, 'id' | 'created_at'>>(BLANK_FORM);
+
+  // Banner upload state
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string>('');
+  const [bannerError, setBannerError] = useState<string>('');
+  const [hackSaving, setHackSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Startups state
   const [startups, setStartups] = useState<any[]>([]);
@@ -309,6 +343,10 @@ export function AdminDashboardPage() {
   const openCreateHack = () => {
     setEditingHack(null);
     setHackForm(BLANK_FORM);
+    setBannerFile(null);
+    setBannerPreview('');
+    setBannerError('');
+    setUploadProgress(null);
     setShowHackForm(true);
   };
 
@@ -328,6 +366,10 @@ export function AdminDashboardPage() {
       category: h.category ?? 'AI/ML',
       banner_url: h.banner_url ?? '',
     });
+    setBannerFile(null);
+    setBannerPreview(h.banner_url ?? '');
+    setBannerError('');
+    setUploadProgress(null);
     setShowHackForm(true);
   };
 
@@ -337,11 +379,67 @@ export function AdminDashboardPage() {
       toast.error('Name, Organizer, and Description are required.');
       return;
     }
+    if (bannerError) {
+      toast.error('Please resolve the banner image error first.');
+      return;
+    }
+
+    setHackSaving(true);
+    setUploadProgress(null);
+
+    let finalBannerUrl = hackForm.banner_url;
+    let oldBannerUrlToDelete: string | null = null;
+
     try {
+      if (bannerFile) {
+        setUploadProgress(0);
+        const fileExt = bannerFile.name.split('.').pop()?.toLowerCase() || 'png';
+        const randomId = Math.random().toString(36).substring(2, 7);
+        const filePath = `hackathons/${Date.now()}-${randomId}-banner.${fileExt}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, bannerFile, {
+            cacheControl: '3600',
+            upsert: true,
+            onUploadProgress: (progress) => {
+              const pct = Math.round((progress.loaded / progress.total) * 100);
+              setUploadProgress(pct);
+            }
+          });
+
+        if (uploadErr) {
+          throw new Error(`Banner upload failed: ${uploadErr.message}`);
+        }
+
+        const { data: urlData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(filePath);
+
+        if (!urlData?.publicUrl) {
+          throw new Error('Failed to retrieve public URL for uploaded banner image.');
+        }
+
+        finalBannerUrl = urlData.publicUrl;
+        
+        if (editingHack?.banner_url) {
+          oldBannerUrlToDelete = editingHack.banner_url;
+        }
+      } else if (!bannerPreview && editingHack?.banner_url) {
+        // Banner was explicitly removed
+        finalBannerUrl = '';
+        oldBannerUrlToDelete = editingHack.banner_url;
+      }
+
+      const updatedForm = {
+        ...hackForm,
+        banner_url: finalBannerUrl
+      };
+
       if (editingHack) {
         const { error } = await supabase
           .from('hackathons')
-          .update(hackForm)
+          .update(updatedForm)
           .eq('id', editingHack.id);
         if (error) throw error;
         toast.success('Hackathon updated!');
@@ -349,12 +447,12 @@ export function AdminDashboardPage() {
         const newId = crypto.randomUUID();
         const { error } = await supabase
           .from('hackathons')
-          .insert({ ...hackForm, id: newId, created_by: user?.id });
+          .insert({ ...updatedForm, id: newId, created_by: user?.id });
         if (error) {
           // localStorage fallback
           const updated = [
             ...hackathons,
-            { ...hackForm, id: newId, created_by: user?.id } as Hackathon,
+            { ...updatedForm, id: newId, created_by: user?.id } as Hackathon,
           ];
           localStorage.setItem('startuphub_hackathons', JSON.stringify(updated));
           setHackathons(updated);
@@ -364,10 +462,31 @@ export function AdminDashboardPage() {
         }
         toast.success('Hackathon created!');
       }
+
+      // Delete the old banner image from storage after successful db update/insert
+      if (oldBannerUrlToDelete) {
+        const storagePath = extractStoragePath(oldBannerUrlToDelete);
+        if (storagePath) {
+          try {
+            const { error: deleteStorageError } = await supabase.storage
+              .from(STORAGE_BUCKET)
+              .remove([storagePath]);
+            if (deleteStorageError) {
+              console.warn('[AdminDashboard] Failed to delete old banner:', deleteStorageError.message);
+            }
+          } catch (storageErr) {
+            console.warn('[AdminDashboard] Storage delete exception:', storageErr);
+          }
+        }
+      }
+
       setShowHackForm(false);
       fetchHackathons();
     } catch (err: any) {
       toast.error(err?.message ?? 'Failed to save hackathon.');
+    } finally {
+      setHackSaving(false);
+      setUploadProgress(null);
     }
   };
 
@@ -697,7 +816,6 @@ export function AdminDashboardPage() {
                                 ['deadline', 'Registration Deadline', 'date', false, ''],
                                 ['website_url', 'Website URL', 'url', false, 'https://'],
                                 ['registration_url', 'Registration URL', 'url', false, 'https://'],
-                                ['banner_url', 'Banner Image URL', 'url', false, 'https://'],
                               ] as [
                                 keyof typeof hackForm,
                                 string,
@@ -721,7 +839,8 @@ export function AdminDashboardPage() {
                                       [field]: e.target.value,
                                     }))
                                   }
-                                  className="block w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-sm outline-none focus:border-orange-500"
+                                  disabled={hackSaving}
+                                  className="block w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-sm outline-none focus:border-orange-500 disabled:opacity-60"
                                 />
                               </div>
                             ))}
@@ -738,7 +857,8 @@ export function AdminDashboardPage() {
                                     category: e.target.value,
                                   }))
                                 }
-                                className="block w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-sm outline-none focus:border-orange-500"
+                                disabled={hackSaving}
+                                className="block w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-sm outline-none focus:border-orange-500 disabled:opacity-60"
                               >
                                 {['AI/ML', 'Web3', 'SaaS', 'Mobile', 'Open Source'].map(
                                   (c) => (
@@ -748,6 +868,83 @@ export function AdminDashboardPage() {
                                   )
                                 )}
                               </select>
+                            </div>
+
+                            {/* Banner Image Upload */}
+                            <div className="space-y-1 md:col-span-2">
+                              <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                                Banner Image
+                              </label>
+                              <div className="flex flex-col gap-2">
+                                {bannerPreview ? (
+                                  <div className="relative rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950 aspect-[21/9] flex items-center justify-center">
+                                    <img
+                                      src={bannerPreview}
+                                      alt="Banner preview"
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setBannerFile(null);
+                                        setBannerPreview('');
+                                        setHackForm((f) => ({ ...f, banner_url: '' }));
+                                      }}
+                                      disabled={hackSaving}
+                                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors disabled:opacity-50"
+                                      title="Remove image"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <label className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 bg-white dark:bg-zinc-900 transition-colors group ${hackSaving ? 'border-zinc-200 dark:border-zinc-800 opacity-60 cursor-not-allowed' : 'border-zinc-200 dark:border-zinc-800 hover:border-orange-500 dark:hover:border-orange-500/50 cursor-pointer'}`}>
+                                    <div className="flex flex-col items-center gap-1.5">
+                                      <div className="w-8 h-8 rounded-full bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
+                                        <Plus className="w-4 h-4" />
+                                      </div>
+                                      <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                        Upload Hackathon Banner
+                                      </div>
+                                      <div className="text-[10px] text-zinc-400">
+                                        JPG, JPEG, PNG, or WEBP up to 5MB
+                                      </div>
+                                    </div>
+                                    <input
+                                      type="file"
+                                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                                      disabled={hackSaving}
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+                                          if (!allowedTypes.includes(file.type)) {
+                                            setBannerError('Only JPG, JPEG, PNG, or WEBP images are allowed.');
+                                            setBannerFile(null);
+                                            setBannerPreview('');
+                                            return;
+                                          }
+                                          if (file.size > 5 * 1024 * 1024) {
+                                            setBannerError('File size exceeds 5MB limit.');
+                                            setBannerFile(null);
+                                            setBannerPreview('');
+                                            return;
+                                          }
+                                          setBannerError('');
+                                          setBannerFile(file);
+                                          setBannerPreview(URL.createObjectURL(file));
+                                        }
+                                      }}
+                                      className="hidden"
+                                    />
+                                  </label>
+                                )}
+                                {bannerError && (
+                                  <p className="text-xs text-red-500 font-medium">
+                                    {bannerError}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -765,12 +962,25 @@ export function AdminDashboardPage() {
                                   description: e.target.value,
                                 }))
                               }
-                              className="block w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-sm outline-none focus:border-orange-500"
+                              disabled={hackSaving}
+                              className="block w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-sm outline-none focus:border-orange-500 disabled:opacity-60"
                             />
                           </div>
 
+                          {hackSaving && uploadProgress !== null && (
+                            <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-2.5 overflow-hidden mt-2">
+                              <div
+                                className="bg-orange-500 h-2.5 rounded-full transition-all duration-300"
+                                style={{ width: `${uploadProgress}%` }}
+                              />
+                              <div className="text-[10px] text-zinc-500 mt-1 text-right font-medium">
+                                Uploading Banner: {uploadProgress}%
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex gap-2 pt-1">
-                            <Button type="submit" variant="primary" size="sm">
+                            <Button type="submit" variant="primary" size="sm" loading={hackSaving} disabled={hackSaving}>
                               {editingHack ? 'Save Changes' : 'Create Hackathon'}
                             </Button>
                             <Button
@@ -778,6 +988,7 @@ export function AdminDashboardPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => setShowHackForm(false)}
+                              disabled={hackSaving}
                             >
                               Cancel
                             </Button>
